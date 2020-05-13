@@ -28,7 +28,7 @@ Motor
 
 `updateMotor()`
 
-`setTargetRPM(float)`
+`setTargetRPM(float rpm)`
 
 `getRPM()`
 
@@ -44,9 +44,9 @@ Motor
 
 Leds
 
-`setFrontLEDs(int, int, int)`
+`setFrontLEDs(int r, int g, int b)`
 
-`setRearLEDs(int, int, int)`
+`setRearLEDs(int r, int g, int b)`
 
 Fsr
 
