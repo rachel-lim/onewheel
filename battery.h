@@ -10,8 +10,10 @@ double voltsPerADC = 0.0008;
 double battVoltages[] = {0,0,0,0,0,0,0,0,0,0};
 int voltageIdx = 0;
 
+// comment out when ready for logging
+#define LOG_PORT SERIAL_PORT_USBVIRTUAL
 
-void updateBattVoltage(bool print) {
+void updateBattVoltage(bool shouldPrint) {
   rawSensor = analogRead(BATT_MONITOR_PIN);
   senseVoltage = rawSensor*voltsPerADC;
   battVoltages[voltageIdx] = senseVoltage*(rL+rS) / rS;
@@ -20,9 +22,9 @@ void updateBattVoltage(bool print) {
     voltageIdx = 0;
   }
 
-  if(print) {
-    Serial.print(", ");
-    Serial.print(battVoltage);
+  if(shouldPrint) {
+    LOG_PORT.print(", ");
+    LOG_PORT.print(battVoltage);
   }
 
 }

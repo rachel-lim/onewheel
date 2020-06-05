@@ -2,7 +2,7 @@
 #define BACK_FSR_PIN A2
 
 
-const int FSRThreshhold = 512;
+const int FSRThreshhold = 900;
 
 
 bool isFrontFSRTriggered() {
@@ -12,4 +12,8 @@ bool isFrontFSRTriggered() {
 
 bool isRearFSRTriggered() {
 	return analogRead(BACK_FSR_PIN) > FSRThreshhold;
+}
+
+boolean isFSRTriggered(int pin) {
+  return analogRead(pin) > 900;
 }

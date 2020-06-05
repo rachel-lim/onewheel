@@ -40,6 +40,16 @@ Hardware:
 
 MPU9250_DMP imu; // Create an instance of the MPU9250_DMP class
 
+// Note: Some of these params can be overwritten using serial
+//  commands. These are just defaults on initial programming
+#define DMP_SAMPLE_RATE    200 // Logging/DMP sample rate(4-200 Hz)
+#define IMU_COMPASS_SAMPLE_RATE 100 // Compass sample rate (4-100 Hz)
+#define IMU_AG_SAMPLE_RATE 1000 // Accel/gyro sample rate Must be between 4Hz and 1kHz
+#define IMU_GYRO_FSR       2000 // Gyro full-scale range (250, 500, 1000, or 2000)
+#define IMU_ACCEL_FSR      2 // Accel full-scale range (2, 4, 8, or 16)
+#define IMU_AG_LPF         5 // Accel/Gyro LPF corner frequency (5, 10, 20, 42, 98, or 188 Hz)
+#define ENABLE_GYRO_CALIBRATION true
+
 /////////////////////////////
 // Logging Control Globals //
 /////////////////////////////
@@ -147,66 +157,86 @@ void setupIMU()
     // Get the next, available log file name
     logFileName = nextLogFile(); 
   }
-
-  // For production testing only
-  // To catch a "$" and enter testing mode
-  //Serial1.begin(115200);
 }
 
 void updateIMU()
 {
   // The loop constantly checks for new serial input:
-  if ( LOG_PORT.available() )
+  /*if ( LOG_PORT.available() )
   {
     // If new input is available on serial port
     parseSerialInput(LOG_PORT.read()); // parse it
-  }
+  }*/
 
   // Then check IMU for new data, and log it
-  if ( !imu.fifoAvailable() ) // If no new data is available
+  if ( !imu.fifoAvailable() ) {// If no new data is available
+    LOG_PORT.println("NO NEW FIFO");
     return;                   // return to the top of the loop
+  }
 
   // Read from the digital motion processor's FIFO
-  if ( imu.dmpUpdateFifo() != INV_SUCCESS )
+  if ( imu.dmpUpdateFifo() != INV_SUCCESS ) {
+    LOG_PORT.println("NO NEW DMP");
     return; // If that fails (uh, oh), return to top
+  }
 
   // If enabled, read from the compass.
-  if ( (enableCompass || enableHeading) && (imu.updateCompass() != INV_SUCCESS) )
+  if (imu.updateCompass() != INV_SUCCESS) {
+    LOG_PORT.println("COMPASS FAILED");
     return; // If compass read fails (uh, oh) return to top
+  }
 
+  imu.computeEulerAngles();
   // If logging (to either UART and SD card) is enabled
-  if ( enableSerialLogging || enableSDLogging)
-    logIMUData(); // Log new data
+  //if ( enableSerialLogging || enableSDLogging)
+    //logIMUData(); // Log new data
 
   // Check for production mode testing message, "$"
   // This will be sent to board from testbed, and should be heard on hadware serial port Serial1
-  if ( Serial1.available() )
+  /*if ( Serial1.available() )
   {
     if ( Serial1.read() == '$' ) production_testing();
-  }
+  }*/
   
 }
 
 float getBoardPitch() {
-  if(imu.ax > 180) {
-    return imu.ax-360;
+  float temp = imu.roll;
+  /*if(temp > 360) {
+    temp = 360;
+  } else if(temp < 0) {
+    temp = 0;
+  }*/
+  if(temp > 180) {
+    return temp-360;
   }
-  return imu.ax;
+  return temp;
 }
 
 float getBoardRoll() {
-  if(imu.ay > 180) {
-    return imu.ay-360;
+  float temp = imu.pitch;
+  /*if(temp > 360) {
+    temp = 360;
+  } else if(temp < 0) {
+    temp = 0;
+  }*/
+  if(temp > 180) {
+    return temp-360;
   }
-
-  return imu.ay;
+  return temp;
 }
 
 float getBoardHeading() {
-  if(imu.az > 180) {
-    return imu.az-360;
+  float temp = imu.yaw;
+  /*if(temp > 360) {
+    temp = 360;
+  } else if(temp < 0) {
+    temp = 0;
+  }*/
+  if(temp > 180) {
+    return temp-360;
   }
-  return imu.az;
+  return temp;
 }
 
 void logIMUData(void)
@@ -330,9 +360,6 @@ void initHardware(void)
 
   // Set up MPU-9250 interrupt input (active-low)
   pinMode(MPU9250_INT_PIN, INPUT_PULLUP);
-
-  // Set up serial log port
-  LOG_PORT.begin(SERIAL_BAUD_RATE);
 }
 
 bool initIMU(void)
@@ -448,117 +475,6 @@ String nextLogFile(void)
   return "";
 }
 
-// Parse serial input, take action if it's a valid character
-void parseSerialInput(char c)
-{
-  unsigned short temp;
-  switch (c)
-  {
-  case PAUSE_LOGGING: // Pause logging on SPACE
-    enableSerialLogging = !enableSerialLogging;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableSerialLogging.write(enableSerialLogging);
-#endif
-    break;
-  case ENABLE_TIME: // Enable time (milliseconds) logging
-    enableTimeLog = !enableTimeLog;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashenableTime.write(enableTimeLog);
-#endif
-    break;
-  case ENABLE_ACCEL: // Enable/disable accelerometer logging
-    enableAccel = !enableAccel;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableAccel.write(enableAccel);
-#endif
-    break;
-  case ENABLE_GYRO: // Enable/disable gyroscope logging
-    enableGyro = !enableGyro;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableGyro.write(enableGyro);
-#endif
-    break;
-  case ENABLE_COMPASS: // Enable/disable magnetometer logging
-    enableCompass = !enableCompass;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableCompass.write(enableCompass);
-#endif
-    break;
-  case ENABLE_CALC: // Enable/disable calculated value logging
-    enableCalculatedValues = !enableCalculatedValues;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableCalculatedValues.write(enableCalculatedValues);
-#endif
-    break;
-  case ENABLE_QUAT: // Enable/disable quaternion logging
-    enableQuat = !enableQuat;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableQuat.write(enableQuat);
-#endif
-    break;
-  case ENABLE_EULER: // Enable/disable Euler angle (roll, pitch, yaw)
-    enableEuler = !enableEuler;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableEuler.write(enableEuler);
-#endif
-    break;
-  case ENABLE_HEADING: // Enable/disable heading output
-    enableHeading = !enableHeading;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableHeading.write(enableHeading);
-#endif
-    break;
-  case SET_LOG_RATE: // Increment the log rate from 1-100Hz (10Hz increments)
-    temp = imu.dmpGetFifoRate(); // Get current FIFO rate
-    if (temp == 1) // If it's 1Hz, set it to 10Hz
-      temp = 10;
-    else
-      temp += 10; // Otherwise increment by 10
-    if (temp > 100)  // If it's greater than 100Hz, reset to 1
-      temp = 1;
-    imu.dmpSetFifoRate(temp); // Send the new rate
-    temp = imu.dmpGetFifoRate(); // Read the updated rate
-#ifdef ENABLE_NVRAM_STORAGE
-    flashLogRate.write(temp); // Store it in NVM and print new rate
-#endif
-    LOG_PORT.println("IMU rate set to " + String(temp) + " Hz");
-    break;
-  case SET_ACCEL_FSR: // Increment accelerometer full-scale range
-    temp = imu.getAccelFSR();      // Get current FSR
-    if (temp == 2) temp = 4;       // If it's 2, go to 4
-    else if (temp == 4) temp = 8;  // If it's 4, go to 8
-    else if (temp == 8) temp = 16; // If it's 8, go to 16
-    else temp = 2;                 // Otherwise, default to 2
-    imu.setAccelFSR(temp); // Set the new FSR
-    temp = imu.getAccelFSR(); // Read it to make sure
-#ifdef ENABLE_NVRAM_STORAGE
-    flashAccelFSR.write(temp); // Update the NVM value, and print
-#endif
-    LOG_PORT.println("Accel FSR set to +/-" + String(temp) + " g");
-    break;
-  case SET_GYRO_FSR:// Increment gyroscope full-scale range
-    temp = imu.getGyroFSR();           // Get the current FSR
-    if (temp == 250) temp = 500;       // If it's 250, set to 500
-    else if (temp == 500) temp = 1000; // If it's 500, set to 1000
-    else if (temp == 1000) temp = 2000;// If it's 1000, set to 2000
-    else temp = 250;                   // Otherwise, default to 250
-    imu.setGyroFSR(temp); // Set the new FSR
-    temp = imu.getGyroFSR(); // Read it to make sure
-#ifdef ENABLE_NVRAM_STORAGE
-    flashGyroFSR.write(temp); // Update the NVM value, and print
-#endif
-    LOG_PORT.println("Gyro FSR set to +/-" + String(temp) + " dps");
-    break;
-  case ENABLE_SD_LOGGING: // Enable/disable SD card logging
-    enableSDLogging = !enableSDLogging;
-#ifdef ENABLE_NVRAM_STORAGE
-    flashEnableSDLogging.write(enableSDLogging);
-#endif
-    break;
-  default: // If an invalid character, do nothing
-    break;
-  }
-}
 
 #ifdef ENABLE_NVRAM_STORAGE
   // Read from non-volatile memory to get logging parameters
@@ -604,134 +520,3 @@ void parseSerialInput(char c)
     }
   }
 #endif
-  
-// All the code and functions below are used for production, and can be removed if desired while still maintaining all product functionality.
-
-// PRODUCTION TESTING VARIABLES
-int net_1_pins[] = {11,A0,A2,A4,9};
-int net_2_pins[] = {12,10,A1,A3,8};
-char input;
-int failures = 0;
-
-// PRODUCTION TESTING FUNCTION
-void production_testing(void)
-{
-  digitalWrite(HW_LED_PIN, HIGH); // Turn on Blue STAT LED for visual inspection                       
-
-  while(1) // stay here, until a hard reset happens
-  {
-    // check for new serial input:
-    if ( Serial1.available() )
-    {
-      // If new input is available on serial1 port
-      // These are connected to the RX/TX on Serial2 on the testbed mega2560.
-      input = Serial1.read(); // grab it
-      switch (input) 
-      {
-        case '$':
-          failures = 0; // reset
-          Serial1.print("h"); // "h" for "hello"
-          break;
-        case '1':
-          if(net_1_test() == true) Serial1.print("a");
-          else Serial1.print("F");
-          break;
-        case '2':
-          if(net_2_test() == true) 
-          {
-            Serial1.print("b");
-            if(uSD_ping() == true) Serial1.print("c");
-            else Serial1.print("F");
-          }
-          else Serial1.print("F");
-          break;        
-      }
-    }
-  }
-}
-
-
-// PRODUCTION TESTING FUNCTION
-// Test that the SD card is there and remove log file
-// I use the result of the SD.remove() function to know if it deleted the file properly
-// Note, this requires that the 9dof wake up and start logging to a new file (even just for a microsecond)
-bool uSD_ping(void)
-{
-//  Serial1.print("nextLogFile: ");
-//  Serial1.print( nextLogFile() );
-
-//  Serial1.print("logFileName: ");
-//  Serial1.print( String(logFileName) );
-
-  bool remove_log_file_result = SD.remove(logFileName);
-//  Serial1.print("r: ");
-//  Serial1.print( remove_log_file_result , BIN);
-
-  if(remove_log_file_result == true) return true;
-  else
-  { 
-    return false;
-  }
-}
-
-// PRODUCTION TESTING FUNCTION
-bool net_1_test()
-{
-  set_nets_all_inputs();
-  // check all net 1 is low
-  for(int i = 0 ; i <= 4 ; i++)
-  {
-    bool result;
-    result = digitalRead(net_1_pins[i]);
-//    Serial1.print(result);
-    if(result == true) failures++;
-  }   
-  Serial1.println(" ");
-  // check all net 2 is high
-  for(int i = 0 ; i <= 4 ; i++)
-  {
-    bool result;
-    result = digitalRead(net_2_pins[i]);
-//    Serial1.print(result);
-    if(result == false) failures++;
-  }   
-  Serial1.println(" ");
-  if(failures == 0) return true;
-  else return false;
-}
-
-// PRODUCTION TESTING FUNCTION
-bool net_2_test()
-{
-  set_nets_all_inputs();
-  // check all net 1 is high
-  for(int i = 0 ; i <= 4 ; i++)
-  {
-    bool result;
-    result = digitalRead(net_1_pins[i]);
-//    Serial1.print(result);
-    if(result == false) failures++;
-  }   
-  //Serial1.println(" ");
-  // check all net 2 is low
-  for(int i = 0 ; i <= 4 ; i++)
-  {
-    bool result;
-    result = digitalRead(net_2_pins[i]);
-//    Serial1.print(result);
-    if(result == true) failures++;
-  }   
-  //Serial1.println(" ");
-  if(failures == 0) return true;
-  else return false;
-}
-
-// PRODUCTION TESTING FUNCTION
-void set_nets_all_inputs()
-{
-  for(int i = 0 ; i <= 4 ; i++)
-  {
-    pinMode(net_1_pins[i], INPUT);
-    pinMode(net_2_pins[i], INPUT);
-  }   
-}
