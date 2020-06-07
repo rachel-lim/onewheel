@@ -40,5 +40,7 @@ void loop() {
   
   //updateIMU();
   updateIMUBasic();
+  //Serial.print("pitch: ");
+  //Serial.println(getBoardPitch());
   
 }

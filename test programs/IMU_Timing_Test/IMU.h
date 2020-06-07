@@ -445,7 +445,7 @@ bool initIMU(void)
   }
   // Add accel and quaternion's to the DMP
   dmpFeatureMask |= DMP_FEATURE_SEND_RAW_ACCEL;
-  //dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
+  dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
 
   // Initialize the DMP, and set the FIFO's update rate:
   imu.dmpBegin(dmpFeatureMask, fifoRate);
