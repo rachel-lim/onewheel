@@ -7,7 +7,7 @@
 #define ENABLE_GYRO_LOG       false
 #define ENABLE_MAG_LOG        false
 #define ENABLE_QUAT_LOG       false
-#define ENABLE_EULER_LOG      true
+#define ENABLE_EULER_LOG      false
 #define ENABLE_HEADING_LOG    false
 
 ////////////////////////////////////////
@@ -19,7 +19,7 @@
 ////////////////////////
 // Serial Port Config //
 ////////////////////////
-#define ENABLE_UART_LOGGING true
+#define ENABLE_UART_LOGGING false
 // Select the Serial port to log to. Either SERIAL_PORT_USBVIRTUAL
 // or LOG_PORT SERIAL_PORT_HARDWARE (SerialUSB or Serial1)
 #define LOG_PORT SERIAL_PORT_USBVIRTUAL
@@ -36,7 +36,7 @@
 /////////////////////////
 // Note: Some of these params can be overwritten using serial
 //  commands. These are just defaults on initial programming
-#define DMP_SAMPLE_RATE    100 // Logging/DMP sample rate(4-200 Hz)
+#define DMP_SAMPLE_RATE    200 // Logging/DMP sample rate(4-200 Hz)
 #define IMU_COMPASS_SAMPLE_RATE 100 // Compass sample rate (4-100 Hz)
 #define IMU_AG_SAMPLE_RATE 500 // Accel/gyro sample rate Must be between 4Hz and 1kHz
 #define IMU_GYRO_FSR       2000 // Gyro full-scale range (250, 500, 1000, or 2000)
@@ -47,7 +47,7 @@
 ///////////////////////
 // SD Logging Config //
 ///////////////////////
-#define ENABLE_SD_LOGGING true // Default SD logging (can be changed via serial menu)
+#define ENABLE_SD_LOGGING false // Default SD logging (can be changed via serial menu)
 #define LOG_FILE_INDEX_MAX 999 // Max number of "logXXX.txt" files
 #define LOG_FILE_PREFIX "log"  // Prefix name for log files
 #define LOG_FILE_SUFFIX "txt"  // Suffix name for log files

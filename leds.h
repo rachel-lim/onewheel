@@ -1,7 +1,7 @@
 
 #include <FastLED.h>
 
-#define NUM_LEDS 20
+#define NUM_LEDS 17
 
 #define FRONT_FSR_PIN A2
 #define REAR_FSR_PIN A1
@@ -20,23 +20,6 @@ void setupLEDs() {
 }
 
 void updateLEDs() {
-  /*if(isFSRTriggered(FRONT_FSR_PIN) && isFSRTriggered(REAR_FSR_PIN)) {
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Green;
-      leds2[i] = CRGB::Green;
-    }
-  } else if(isFSRTriggered(FRONT_FSR_PIN) || isFSRTriggered(REAR_FSR_PIN)) {
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Blue;
-      leds2[i] = CRGB::Blue;
-    }
-  } else {
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Red;
-      leds2[i] = CRGB::Red;
-    }
-  }*/
-
   FastLED.show();
 }
 
@@ -45,12 +28,12 @@ void setFrontLEDs(int R, int G, int B) {
 	for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
     leds[i] = CRGB(R,G,B);
   }
-  FastLED.show();
+  //FastLED.show();
 }
 
 void setRearLEDs(int R, int G, int B) {
-	for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
+	for(int i=0; i<(sizeof(leds)/sizeof(leds2[0])); i++) {
     leds2[i] = CRGB(R,G,B);
   }
-  FastLED.show();
+  //FastLED.show();
 }

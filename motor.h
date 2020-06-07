@@ -53,10 +53,10 @@ void setMotorRPM(float rpm) {
 }
 
 void setMotorCurrent(float current) {
-  if(current > 20) {
-    current = 20;
-  } else if(current < -20) {
-    current = -20;
+  if(current > 30) {
+    current = 30;
+  } else if(current < -30) {
+    current = -30;
   }
   UART.setCurrent(current);
 }

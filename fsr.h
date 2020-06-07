@@ -2,15 +2,25 @@
 #define BACK_FSR_PIN A2
 
 
-const int FSRThreshhold = 900;
+#define FSRThreshhold = 900;
+
+// use these variables rather than reading the pin every time!!!
+bool isFrontFSRTriggered = false;
+bool isRearFSRTriggered = false;
 
 
-bool isFrontFSRTriggered() {
+bool updateFSRs() {
+  isFrontFSRTriggered = _isFrontFSRTriggered();
+  isRearFSRTriggered = _isRearFSRTriggered();
+}
+
+
+bool _isFrontFSRTriggered() {
 	return analogRead(FRONT_FSR_PIN) > FSRThreshhold;
 }
 
 
-bool isRearFSRTriggered() {
+bool _isRearFSRTriggered() {
 	return analogRead(BACK_FSR_PIN) > FSRThreshhold;
 }
 

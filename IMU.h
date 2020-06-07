@@ -159,54 +159,25 @@ void setupIMU()
   }
 }
 
-void updateIMU()
-{
-  // The loop constantly checks for new serial input:
-  /*if ( LOG_PORT.available() )
-  {
-    // If new input is available on serial port
-    parseSerialInput(LOG_PORT.read()); // parse it
-  }*/
-
+void updateIMU() {
   // Then check IMU for new data, and log it
   if ( !imu.fifoAvailable() ) {// If no new data is available
-    LOG_PORT.println("NO NEW FIFO");
+    //LOG_PORT.println("NO NEW FIFO");
     return;                   // return to the top of the loop
   }
 
   // Read from the digital motion processor's FIFO
   if ( imu.dmpUpdateFifo() != INV_SUCCESS ) {
-    LOG_PORT.println("NO NEW DMP");
+    //LOG_PORT.println("NO NEW DMP");
     return; // If that fails (uh, oh), return to top
   }
-
-  // If enabled, read from the compass.
-  if (imu.updateCompass() != INV_SUCCESS) {
-    LOG_PORT.println("COMPASS FAILED");
-    return; // If compass read fails (uh, oh) return to top
-  }
-
-  imu.computeEulerAngles();
-  // If logging (to either UART and SD card) is enabled
-  //if ( enableSerialLogging || enableSDLogging)
-    //logIMUData(); // Log new data
-
-  // Check for production mode testing message, "$"
-  // This will be sent to board from testbed, and should be heard on hadware serial port Serial1
-  /*if ( Serial1.available() )
-  {
-    if ( Serial1.read() == '$' ) production_testing();
-  }*/
   
+  imu.computeEulerAngles();
 }
 
 float getBoardPitch() {
   float temp = imu.roll;
-  /*if(temp > 360) {
-    temp = 360;
-  } else if(temp < 0) {
-    temp = 0;
-  }*/
+  
   if(temp > 180) {
     return temp-360;
   }
@@ -215,11 +186,7 @@ float getBoardPitch() {
 
 float getBoardRoll() {
   float temp = imu.pitch;
-  /*if(temp > 360) {
-    temp = 360;
-  } else if(temp < 0) {
-    temp = 0;
-  }*/
+  
   if(temp > 180) {
     return temp-360;
   }
@@ -228,11 +195,7 @@ float getBoardRoll() {
 
 float getBoardHeading() {
   float temp = imu.yaw;
-  /*if(temp > 360) {
-    temp = 360;
-  } else if(temp < 0) {
-    temp = 0;
-  }*/
+  
   if(temp > 180) {
     return temp-360;
   }

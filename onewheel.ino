@@ -80,6 +80,7 @@ void loop() {
 	// run updates of sensors, etc
   updateIMU();
   updateBattVoltage(false);
+  updateFSRs();
   //updateMotor();
   //LOG_PORT.print(millis());
   LOG_PORT.print(", p: ");
@@ -143,7 +144,7 @@ void doWaitForRider() {
   }
 	
 	// monitor FSRs
-	if(isFrontFSRTriggered() && isRearFSRTriggered()) {
+	if(isFrontFSRTriggered && isRearFSRTriggered) {
 		if(abs(boardAngle) < 10) {
 			boardState = riding;
       
@@ -160,7 +161,7 @@ int missingFootMaxCount = 10;
 
 void doRiding() {
   // both feet are not firmly on the board
-  if(!isFrontFSRTriggered() || !isRearFSRTriggered()) {
+  if(!isFrontFSRTriggered || !isRearFSRTriggered) {
     missingFootCounter++;
   } else {
     missingFootCounter = 0;
