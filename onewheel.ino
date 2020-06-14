@@ -1,10 +1,5 @@
 #include "util.h"
 #include "MathUtil.h"
-#include "battery.h"
-#include "fsr.h"
-#include "leds.h"
-#include "motor.h"
-#include "IMU.h"
 
 double boardAngle = 0;
 double error = 0;
@@ -42,9 +37,16 @@ enum BoardState{
 };
 
 BoardState boardState = booting;
+BoardState prevBoardState = booting;
 
 // comment out when ready for logging
 #define LOG_PORT SERIAL_PORT_USBVIRTUAL
+
+#include "IMU.h"
+#include "battery.h"
+#include "fsr.h"
+#include "leds.h"
+#include "motor.h"
 
 
 void setup() {
@@ -118,7 +120,7 @@ void loop() {
 
   updateLEDs();
   LOG_PORT.println();
-  
+  prevBoardState = boardState;
 
 }
 
@@ -126,7 +128,7 @@ void loop() {
 
 void doWaitForRider() {
 	// slow pulse LEDs
-	if(isFSRTriggered(FRONT_FSR_PIN) && isFSRTriggered(REAR_FSR_PIN)) {
+	/*if(isFSRTriggered(FRONT_FSR_PIN) && isFSRTriggered(REAR_FSR_PIN)) {
     for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
       leds[i] = CRGB::Green;
       leds2[i] = CRGB::Green;
@@ -141,7 +143,7 @@ void doWaitForRider() {
       leds[i] = CRGB::Red;
       leds2[i] = CRGB::Red;
     }
-  }
+  } */
 	
 	// monitor FSRs
 	if(isFrontFSRTriggered && isRearFSRTriggered) {
@@ -175,7 +177,7 @@ void doRiding() {
     return;
   }
 
-  if(invertLEDsOnStartup) {
+  /*if(invertLEDsOnStartup) {
     if(getBoardPitch() > 0) {
       setFrontLEDs(255,255,255);
       setRearLEDs(255,0,0);
@@ -191,7 +193,7 @@ void doRiding() {
       setFrontLEDs(255,0,0);
       setRearLEDs(255,255,255);
     }
-  }
+  } */
 
   if(!hasStartedRiding) {
     if(abs(getBoardPitch()) > 5) {
