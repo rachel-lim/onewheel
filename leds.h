@@ -35,44 +35,54 @@ void setRearPixel(int Pixel, byte red, byte green, byte blue);
 void setFrontAll(byte red, byte green, byte blue);
 void setRearAll(byte red, byte green, byte blue);
 
+void setFrontLEDs(int red, int green, int blue);
+void setRearLEDs(int red, int green, int blue);
+
 void setupLEDs() {
   FastLED.addLeds<WS2812, DATA_PIN, GRB>(leds, NUM_LEDS);
   FastLED.addLeds<WS2812, DATA_PIN_2, GRB>(leds2, NUM_LEDS);
-  setFrontAll(0,0,0);
-  setRearAll(0,0,0);
+  setFrontLEDs(0,0,0);
+  setRearLEDs(0,0,0);
 }
 
 void updateLEDs() {
   if(prevBoardState != boardState) {
     newFrontRoutine = true;
     newRearRoutine = true;
+    LOG_PORT.print("new mode: ");
+    LOG_PORT.println(boardState);
   }
 
   switch(boardState) {
     case waitingForRider:
       if(!isFrontFSRTriggered && !isRearFSRTriggered) { // no footpads detected
         fadeSyncedInOut(128,0,128,1500);
-      } else {
-        if(isFrontFSRTriggered) { // only front footpad detected
-          fadeFrontInOut(128,0,128,1000);
-          updateBounceRear(128,0,128,1,50,20);
-        } else { // only rear footpad detected
-          fadeRearInOut(128,0,128,1000);
-          updateBounceFront(128,0,128,1,50,20);
-        }
+      } else if(isFrontFSRTriggered && !isRearFSRTriggered) { // only front footpad detected
+        fadeFrontInOut(128,0,128,500);
+        updateBounceRear(128,0,128,1,50,20);
+      } else if(isRearFSRTriggered && !isFrontFSRTriggered) { // only rear footpad detected
+        fadeRearInOut(128,0,128,500);
+        updateBounceFront(128,0,128,1,50,20);
+      } else { // both FSRs triggered, but still tipped 
+        updateBounceSynced(0,255,0,1,50,20);
       }
       break;
     case riding:
-      if(getBoardPitch() < -2) {
+      setFrontAll(0,0,0);
+      setRearAll(0,0,0);
+      if(boardAngle < -2) {
         setFrontAll(255,255,255);
         setRearAll(255,0,0);
-      } else if(getBoardPitch() > 2) {
+      } else if(boardAngle > 2) {
         setFrontAll(255,0,0);
         setRearAll(255,255,255);
       } else {
         setFrontAll(255,255,255);
         setRearAll(255,255,255);
       }
+      break;
+    case justStopped:
+      fadeSyncedInOut(255,165,0,500);
       break;
     case limpMode:
       

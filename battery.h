@@ -13,7 +13,7 @@ double correctionFactor = 42.2/55.2; // measured vs calc'ed values
 const double batteryScaler = ((rL+rS) / rS * correctionFactor)*voltsPerADC; // precalc once for speed
 
 // comment out when ready for logging
-#define LOG_PORT SERIAL_PORT_USBVIRTUAL
+//#define LOG_PORT SERIAL_PORT_USBVIRTUAL
 
 void updateBattVoltage(bool shouldPrint) {
   battVoltages[voltageIdx] = analogRead(BATT_MONITOR_PIN) * batteryScaler;

@@ -3,8 +3,9 @@
 
 double boardAngle = 0;
 double error = 0;
-double time = micros();
+//double time = micros();
 double deltaTime = 0;
+double prevTime = 0;
 double errorAccumulated = 0;
 double previousError = 0;
 double deltaError = 0;
@@ -12,7 +13,9 @@ volatile double kP = 500;
 volatile double kI = 0;
 double iMax = 10;
 volatile double kD = 0;
-double kF = 0;
+double currentSpeed = 0;
+double throttlePedal = 0.5;
+double overallGain = 0.35;
 double motorOutput = 0;
 double calcedMotorOutput = 0;
 double allowableChangePerCycle = 10; // rpm
@@ -31,6 +34,7 @@ enum BoardState{
 	booting,
 	waitingForRider,
 	riding,
+  justStopped,
 	limpMode,
 	slowStop,
 	detectedError
@@ -78,6 +82,7 @@ void setup() {
 }
 
 
+
 void loop() {
 	// run updates of sensors, etc
   updateIMU();
@@ -85,8 +90,9 @@ void loop() {
   updateFSRs();
   //updateMotor();
   //LOG_PORT.print(millis());
-  LOG_PORT.print(", p: ");
-  LOG_PORT.print(getBoardPitch());
+  //LOG_PORT.print(", p: ");
+  //LOG_PORT.print(getBoardPitch());
+  //LOG_PORT.print(boardAngle);
   /*LOG_PORT.print(" r: ");
   LOG_PORT.print(getBoardRoll());
   LOG_PORT.print(" y: ");
@@ -105,6 +111,9 @@ void loop() {
 	    case riding:
 	      doRiding();
 	      break;
+      case justStopped:
+        doJustStopped();
+        break;
 	    case limpMode:
 	      // do something
 	      break;
@@ -119,32 +128,47 @@ void loop() {
 	}
 
   updateLEDs();
-  LOG_PORT.println();
+  //LOG_PORT.println();
   prevBoardState = boardState;
 
+  //runFrequencyTimingCheck();
 }
 
 
+// timing variables
+long startTime = 0;
+long endTime = 0;
+int timingCycleCounter = 0;
+int TIMED_CYCLES = 100;
+long avgTime = 0;
+long totalTime = 0;
+float frequency = 0; // Hz
+
+void runFrequencyTimingCheck() {
+  if(timingCycleCounter == 0) { // first run
+    startTime = micros();
+    timingCycleCounter++;
+  } else if(timingCycleCounter >= TIMED_CYCLES) { // finished test, report output and reset
+    endTime = micros();
+    totalTime = endTime - startTime;
+    frequency = (float)TIMED_CYCLES / totalTime * 1000000;
+    avgTime = totalTime / TIMED_CYCLES;
+    LOG_PORT.print(TIMED_CYCLES);
+    LOG_PORT.print(" cycles averaged ");
+    LOG_PORT.print(avgTime);
+    LOG_PORT.print(" microseconds per loop resulting in ");
+    LOG_PORT.print(frequency);
+    LOG_PORT.println(" Hz");
+    timingCycleCounter = 0;
+  } else { // middle of testing
+    timingCycleCounter++;
+  }
+
+}
 
 void doWaitForRider() {
-	// slow pulse LEDs
-	/*if(isFSRTriggered(FRONT_FSR_PIN) && isFSRTriggered(REAR_FSR_PIN)) {
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Green;
-      leds2[i] = CRGB::Green;
-    }
-  } else if(isFSRTriggered(FRONT_FSR_PIN) || isFSRTriggered(REAR_FSR_PIN)) {
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Blue;
-      leds2[i] = CRGB::Blue;
-    }
-  } else { //TODO: Replace with red pulsing
-    for(int i=0; i<(sizeof(leds)/sizeof(leds[0])); i++) {
-      leds[i] = CRGB::Red;
-      leds2[i] = CRGB::Red;
-    }
-  } */
-	
+	currentSpeed = 0;
+ 
 	// monitor FSRs
 	if(isFrontFSRTriggered && isRearFSRTriggered) {
 		if(abs(boardAngle) < 10) {
@@ -153,13 +177,15 @@ void doWaitForRider() {
 		}
 	}
 
+  setMotorDutyCycle(0.0);
+
   hasStartedRiding = false;
   prevMotorSpeed = 0;
 }
 
 
 int missingFootCounter = 0;
-int missingFootMaxCount = 10;
+int missingFootMaxCount = 100;
 
 void doRiding() {
   // both feet are not firmly on the board
@@ -169,10 +195,17 @@ void doRiding() {
     missingFootCounter = 0;
   }
 
-  // rider appears to have fallen off
+  // rider appears to have fallen off or touched down
   if(missingFootCounter > missingFootMaxCount) {
     LOG_PORT.println("!!!RIDER MISSING FEET!!!   returning to waiting for rider");
-    boardState = waitingForRider;
+    boardState = justStopped;
+    setMotorRPM(0);
+    return;
+  }
+
+  if(abs(boardAngle) > 18) {
+    LOG_PORT.println("!!!BOARD TIPPED TOO FAR!!!   returning to waiting for rider");
+    boardState = justStopped;
     setMotorRPM(0);
     return;
   }
@@ -196,7 +229,7 @@ void doRiding() {
   } */
 
   if(!hasStartedRiding) {
-    if(abs(getBoardPitch()) > 5) {
+    if(abs(boardAngle) > 1) {
       invertLEDsOnStartup = true;
       return;
     } else {
@@ -207,24 +240,44 @@ void doRiding() {
 
 
   
-	double motorSpeed = calcMotorOutput(getBoardPitch());
-  if(abs(prevMotorSpeed - motorSpeed) > allowableChangePerCycle) {
-    motorSpeed = prevMotorSpeed + (allowableChangePerCycle*sign(motorSpeed - prevMotorSpeed));
+	//double motorSpeed = calcMotorSpeedOutput(getBoardPitch());
+  //if(abs(prevMotorSpeed - motorSpeed) > allowableChangePerCycle) {
+    //motorSpeed = prevMotorSpeed + (allowableChangePerCycle*sign(motorSpeed - prevMotorSpeed));
     
     /*if(motorSpeed > prevMotorSpeed) {
       motorSpeed = prevMotorSpeed + allowableChangePerCycle;
     } else {
       motorSpeed = prevMotorSpeed - allowableChangePerCycle;
     } */
-  }
+  //}
  
-  setMotorRPM(motorSpeed);
+  //setMotorRPM(motorSpeed);
+
+  double motorSpeed = calcMotorDutyCycle();
+  
   prevMotorSpeed = motorSpeed;
   //double motorCurrent = calcMotorOutput(getBoardPitch());
   //setMotorCurrent(motorCurrent);
+  setMotorDutyCycle(motorSpeed);
   
-  LOG_PORT.print(", rpm: ");
-  LOG_PORT.print(motorSpeed);
+  //LOG_PORT.print(", dutyCycle: ");
+  //LOG_PORT.print(motorSpeed);
+}
+
+long timeStopped = millis();
+long prevTimeStopped = millis();
+long timeToStop = 1000;
+
+void doJustStopped() {
+  if(millis() - prevTimeStopped > 100) { // long delay since last time we were here, assume we just stopped
+    timeStopped = millis();
+  }
+  
+  prevTimeStopped = millis();
+    
+  if(!isFrontFSRTriggered || !isRearFSRTriggered && (millis() > timeStopped + timeToStop)) {
+    boardState = waitingForRider;
+  }
 }
 
 void doLimpMode() {
@@ -251,14 +304,14 @@ bool isIMUworking() {
 	return true;
 }
 
-double calcMotorOutput(double _boardAngle) {
+double calcMotorSpeedOutput(double _boardAngle) {
 	// current system state
 	previousError = error;
 	error = squareMaintainSign(_boardAngle*0.01)*100;
 	deltaError = error - previousError;
 
-	deltaTime = micros() - time;
-	time = micros();
+	deltaTime = micros() - prevTime;
+	prevTime = micros();
 
 	errorAccumulated += error;
 	if(abs(errorAccumulated) > iMax) {
@@ -272,6 +325,21 @@ double calcMotorOutput(double _boardAngle) {
 	return motorOutput = kP*error + kI*errorAccumulated + kD*deltaError/deltaTime;
 }
 
+double calcMotorDutyCycle() {
+  float angleRads = boardAngle*0.017453;
+  float balanceTorque = (float)(4.5*angleRads) + (0.5*gyroRateRads);
+  //LOG_PORT.print(", balTorque: ");
+  //LOG_PORT.print(balanceTorque);
+  currentSpeed = (float)(currentSpeed + (throttlePedal*balanceTorque*deltaTime*0.000001)) * 0.999;
+  //LOG_PORT.print(", curSpeed: ");
+  //LOG_PORT.print(currentSpeed);
+  motorOutput = (balanceTorque + currentSpeed) * overallGain;
+  //LOG_PORT.print(", motorOutput: ");
+  //LOG_PORT.print(motorOutput);
+  motorOutput = limitValue(motorOutput, 0.7, -0.7);
+  return motorOutput;
+  
+}
 
 
 bool shouldRide() {
@@ -321,10 +389,41 @@ void mySerialEvent() {
       LOG_PORT.print("iMax: ");
       LOG_PORT.println(iMax);
       break;
+
+    case 'o':
+      overallGain = data.substring(indexOfFirstNumber(data)).toFloat();
+      LOG_PORT.print("overallGain: ");
+      LOG_PORT.println(overallGain);
+      break;
+
+    case 't':
+      throttlePedal = data.substring(indexOfFirstNumber(data)).toFloat();
+      LOG_PORT.print("throttlePedal: ");
+      LOG_PORT.println(throttlePedal);
+      break;
+
+    case 'f':
+      //throttlePedal = data.substring(indexOfFirstNumber(data)).toFloat();
+      LOG_PORT.print("overallGain: ");
+      LOG_PORT.println(overallGain);
+      LOG_PORT.print("throttlePedal: ");
+      LOG_PORT.println(throttlePedal);
+      break;
       
     default:
-      LOG_PORT.print("input data not processed: ");
+      LOG_PORT.print("new input data not processed: ");
       LOG_PORT.println(data);
+      LOG_PORT.print("overallGain: ");
+      LOG_PORT.println(overallGain);
+      LOG_PORT.print("throttlePedal: ");
+      LOG_PORT.println(throttlePedal);
+      LOG_PORT.print("boardAngle: ");
+      LOG_PORT.println(boardAngle);
+      LOG_PORT.print("currentSpeed: ");
+      LOG_PORT.println(currentSpeed);
+      LOG_PORT.print("boardState: ");
+      LOG_PORT.println((String)boardState);
+      
   }
 }
 

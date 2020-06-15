@@ -159,6 +159,9 @@ void setupIMU()
   }
 }
 
+float gyroRate = 0;
+float gyroRateRads = 0;
+
 void updateIMU() {
   // Then check IMU for new data, and log it
   if ( !imu.fifoAvailable() ) {// If no new data is available
@@ -173,15 +176,30 @@ void updateIMU() {
   }
   
   imu.computeEulerAngles();
+
+  float accel = -imu.calcAccel(imu.ax) * 20/0.35;
+  accel = limitValue(accel, 80, -80);
+  
+  gyroRate = imu.calcGyro(imu.gy);
+  gyroRate = limitValue(gyroRate, 92, -92);
+
+  float aa = 0.05; //how much we use the accelerometer in the calcs
+  deltaTime = micros() - prevTime;
+  float gyroAngleDt = gyroRate *  deltaTime * 0.000001; // how much the angle has changed
+  prevTime = micros();
+  gyroRateRads = gyroRate * 0.017453;
+  boardAngle = float ((1-aa) * (boardAngle+gyroAngleDt)) + aa*accel;
+  
 }
 
 float getBoardPitch() {
-  float temp = imu.roll;
+  /*float temp = imu.roll;
   
   if(temp > 180) {
     return temp-360;
   }
-  return temp;
+  return temp; */
+  return boardAngle;
 }
 
 float getBoardRoll() {
@@ -367,7 +385,7 @@ bool initIMU(void)
   }
   // Add accel and quaternion's to the DMP
   dmpFeatureMask |= DMP_FEATURE_SEND_RAW_ACCEL;
-  dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
+  //dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
 
   // Initialize the DMP, and set the FIFO's update rate:
   imu.dmpBegin(dmpFeatureMask, fifoRate);
