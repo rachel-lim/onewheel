@@ -183,7 +183,7 @@ void updateIMU() {
   gyroRate = imu.calcGyro(imu.gy);
   gyroRate = limitValue(gyroRate, 92, -92);
 
-  float aa = 0.05; //how much we use the accelerometer in the calcs
+  float aa = 0.03; //how much we use the accelerometer in the calcs
   deltaTime = micros() - prevTime;
   float gyroAngleDt = gyroRate *  deltaTime * 0.000001; // how much the angle has changed
   prevTime = micros();

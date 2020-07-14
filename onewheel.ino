@@ -14,8 +14,8 @@ volatile double kI = 0;
 double iMax = 10;
 volatile double kD = 0;
 double currentSpeed = 0;
-double throttlePedal = 0.5;
-double overallGain = 0.35;
+double throttlePedal = 0.0;
+double overallGain = 0.22;
 double motorOutput = 0;
 double calcedMotorOutput = 0;
 double allowableChangePerCycle = 10; // rpm
@@ -184,59 +184,66 @@ void doWaitForRider() {
 }
 
 
-int missingFootCounter = 0;
-int missingFootMaxCount = 100;
+int missingFootMaxTime = 500;
+bool wasMissingFeetLastCycle = false;
+long timeFeetLost = millis();
+
+int tippedMaxTime = 500;
+bool wasTippedLastCycle = false;;
+long timeTipped = millis();
+
+int startupStiffeningTime = 1000;
+long timeStartedRiding = millis();
+
 
 void doRiding() {
-  // both feet are not firmly on the board
-  if(!isFrontFSRTriggered || !isRearFSRTriggered) {
-    missingFootCounter++;
-  } else {
-    missingFootCounter = 0;
-  }
-
-  // rider appears to have fallen off or touched down
-  if(missingFootCounter > missingFootMaxCount) {
-    LOG_PORT.println("!!!RIDER MISSING FEET!!!   returning to waiting for rider");
-    boardState = justStopped;
-    setMotorRPM(0);
-    return;
-  }
-
-  if(abs(boardAngle) > 18) {
-    LOG_PORT.println("!!!BOARD TIPPED TOO FAR!!!   returning to waiting for rider");
-    boardState = justStopped;
-    setMotorRPM(0);
-    return;
-  }
-
-  /*if(invertLEDsOnStartup) {
-    if(getBoardPitch() > 0) {
-      setFrontLEDs(255,255,255);
-      setRearLEDs(255,0,0);
-    } else {
-      setFrontLEDs(255,0,0);
-      setRearLEDs(255,255,255);
-    }
-  } else {
-    if(getBoardPitch() < 0) {
-      setFrontLEDs(255,255,255);
-      setRearLEDs(255,0,0);
-    } else {
-      setFrontLEDs(255,0,0);
-      setRearLEDs(255,255,255);
-    }
-  } */
 
   if(!hasStartedRiding) {
+
+    
     if(abs(boardAngle) > 1) {
       invertLEDsOnStartup = true;
       return;
     } else {
       hasStartedRiding = true;
       invertLEDsOnStartup = false;
+      wasMissingFeetLastCycle = false;
+      wasTippedLastCycle = false;
     }
   }
+  
+  // both feet are not firmly on the board
+  if(!isFrontFSRTriggered || !isRearFSRTriggered) {
+    if(!wasMissingFeetLastCycle) {
+      wasMissingFeetLastCycle = true;
+      timeFeetLost = millis();
+    } else if(millis() - timeFeetLost > missingFootMaxTime) { // rider appears to have fallen off
+      LOG_PORT.println("!!!RIDER MISSING FEET!!!   returning to waiting for rider");
+      boardState = justStopped;
+      setMotorRPM(0);
+      return;
+    }
+  } else {
+    wasMissingFeetLastCycle = false;
+  }
+
+  // board angle exceeds acceptable riding angle (likely fallen over)
+  if(abs(boardAngle) > 18) {
+    if(!wasTippedLastCycle) {
+      timeTipped = millis();
+      wasTippedLastCycle = true;
+    } else if(millis() - timeTipped > tippedMaxTime){
+      LOG_PORT.println("!!!BOARD TIPPED TOO FAR!!!   returning to waiting for rider");
+      boardState = justStopped;
+      setMotorRPM(0);
+      return;
+    }
+  } else {
+    wasTippedLastCycle = false;
+  }
+
+
+  
 
 
   
@@ -384,7 +391,7 @@ void mySerialEvent() {
       LOG_PORT.println(allowableChangePerCycle);
       break;
 
-    case 'm':
+    case 'x':
       iMax = data.substring(indexOfFirstNumber(data)).toFloat();
       LOG_PORT.print("iMax: ");
       LOG_PORT.println(iMax);
@@ -402,13 +409,31 @@ void mySerialEvent() {
       LOG_PORT.println(throttlePedal);
       break;
 
-    case 'f':
-      //throttlePedal = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("overallGain: ");
-      LOG_PORT.println(overallGain);
-      LOG_PORT.print("throttlePedal: ");
-      LOG_PORT.println(throttlePedal);
+    case 'm':
+      missingFootMaxTime = data.substring(indexOfFirstNumber(data)).toInt();
+      LOG_PORT.print("missingFootTimeout: ");
+      LOG_PORT.println(missingFootMaxTime);
       break;
+
+    case 'f':
+      tippedMaxTime = data.substring(indexOfFirstNumber(data)).toInt();
+      LOG_PORT.print("tippedMaxTimeout: ");
+      LOG_PORT.println(tippedMaxTime);
+      break;
+
+    case 'l':
+      LOG_PORT.println("LOG AND DIAGNOSTIC DATA"); 
+      LOG_PORT.print("boardAngle: ");
+      LOG_PORT.println(boardAngle);
+      LOG_PORT.print("frontFSR: ");
+      LOG_PORT.println(analogRead(FRONT_FSR_PIN));
+      LOG_PORT.print("rearFSR: ");
+      LOG_PORT.println(analogRead(BACK_FSR_PIN));
+      LOG_PORT.print("battery voltage: ");
+      LOG_PORT.println(getBattVoltage());
+      LOG_PORT.print(": ");
+      LOG_PORT.println();
+      
       
     default:
       LOG_PORT.print("new input data not processed: ");
