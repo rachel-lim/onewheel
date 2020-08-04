@@ -33,6 +33,7 @@ Hardware:
 // config.h manages default logging parameters and can be used
 // to adjust specific parameters of the IMU
 #include "config.h"
+#include "Kalman.h"
 // Flash storage (for nv storage on ATSAMD21)
 #ifdef ENABLE_NVRAM_STORAGE
 #include <FlashStorage.h>
@@ -131,6 +132,17 @@ bool net_2_test();
 void set_nets_all_inputs();
 
 
+// kalman filter stuff
+Kalman kalmanX;
+Kalman kalmanY;
+float angle_estimate=0;
+double gyroXangle, gyroYangle; // Angle calculate using the gyro only
+double compAngleX, compAngleY; // Calculated angle using a complementary filter
+double kalAngleX, kalAngleY; // Calculated angle using a Kalman filter
+float CorrectedAngle; //initial 0 value for footpad safety
+uint32_t timer;
+double dt=0;
+
 
 void setupIMU()
 {
@@ -157,10 +169,18 @@ void setupIMU()
     // Get the next, available log file name
     logFileName = nextLogFile(); 
   }
+
+  //double roll  = atan(imu.calcAccel(imu.ax) / sqrt(imu.calcAccel(imu.ay) * imu.calcAccel(imu.ay) + imu.calcAccel(imu.az) * imu.calcAccel(imu.az))) * RAD_TO_DEG;
+  double roll  = atan2(imu.calcAccel(imu.ax), imu.calcAccel(imu.az)) * RAD_TO_DEG;
+  double pitch = atan2(-imu.calcAccel(imu.ay), imu.calcAccel(imu.az)) * RAD_TO_DEG;
+  gyroXangle = roll;
+  gyroYangle = pitch;
+  compAngleX = roll;
+  compAngleY = pitch;
+
+  timer = micros();
 }
 
-float gyroRate = 0;
-float gyroRateRads = 0;
 
 void updateIMU() {
   // Then check IMU for new data, and log it
@@ -176,19 +196,75 @@ void updateIMU() {
   }
   
   imu.computeEulerAngles();
+  // imu.calcAccel(imu.ax);
+  // imu.calcGyro(imu.gy);
+  /*dt = (double)(micros() - timer) / 1000000; // Calculate delta time
+  timer = micros();
 
-  float accel = -imu.calcAccel(imu.ax) * 20/0.35;
-  accel = limitValue(accel, 80, -80);
+  //double roll  = atan(imu.calcAccel(imu.ax) / sqrt(imu.calcAccel(imu.ay) * imu.calcAccel(imu.ay) + imu.calcAccel(imu.az) * imu.calcAccel(imu.az))) * RAD_TO_DEG;
+  double roll  = atan2(imu.calcAccel(imu.ax), imu.calcAccel(imu.az)) * RAD_TO_DEG;
+  double pitch = atan2(-imu.calcAccel(imu.ay), imu.calcAccel(imu.az)) * RAD_TO_DEG;
   
-  gyroRate = imu.calcGyro(imu.gy);
-  gyroRate = limitValue(gyroRate, 92, -92);
+  double gyroXrate = -imu.calcGyro(imu.gy);
+  double gyroYrate = -imu.calcGyro(imu.gx);
 
-  float aa = 0.03; //how much we use the accelerometer in the calcs
-  deltaTime = micros() - prevTime;
-  float gyroAngleDt = gyroRate *  deltaTime * 0.000001; // how much the angle has changed
-  prevTime = micros();
-  gyroRateRads = gyroRate * 0.017453;
-  boardAngle = float ((1-aa) * (boardAngle+gyroAngleDt)) + aa*accel;
+  // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+  if ((pitch < -90 && kalAngleY > 90) || (pitch > 90 && kalAngleY < -90)) {
+    kalmanY.setAngle(pitch);
+    compAngleY = pitch;
+    kalAngleY = pitch;
+    gyroYangle = pitch;
+  } else
+    kalAngleY = kalmanY.getAngle(pitch, gyroYrate, dt); // Calculate the angle using a Kalman filter
+
+  if (abs(kalAngleY) > 90)
+    gyroXrate = -gyroXrate; // Invert rate, so it fits the restriced accelerometer reading
+  kalAngleX = kalmanX.getAngle(roll, gyroXrate, dt); // Calculate the angle using a Kalman filter
+
+  gyroXangle += gyroXrate * dt; // Calculate gyro angle without any filter
+  gyroYangle += gyroYrate * dt;
+
+  /*LOG_PORT.print(", aX: ");
+  LOG_PORT.print(imu.calcAccel(imu.ax));
+  LOG_PORT.print(", aY: ");
+  LOG_PORT.print(imu.calcAccel(imu.ay));
+  LOG_PORT.print(", aZ: ");
+  LOG_PORT.println(imu.calcAccel(imu.az));*/
+  
+  /*LOG_PORT.print(", gXR: ");
+  LOG_PORT.print(gyroXrate);
+  LOG_PORT.print(", gYR: ");
+  LOG_PORT.print(gyroYrate);
+
+  LOG_PORT.print(", gXA: ");
+  LOG_PORT.print(gyroXangle);
+  LOG_PORT.print(", gYA: ");
+  LOG_PORT.print(gyroYangle);
+  
+  LOG_PORT.print(", r: ");
+  LOG_PORT.print(roll);
+  LOG_PORT.print(", p: ");
+  LOG_PORT.print(pitch); */
+  
+  /*
+  compAngleX = 0.93 * (compAngleX + gyroXrate * dt) + 0.07 * roll; // Calculate the angle using a Complimentary filter
+  compAngleY = 0.93 * (compAngleY + gyroYrate * dt) + 0.07 * pitch;
+
+  // Reset the gyro angle when it has drifted too much
+  if (gyroXangle < -180 || gyroXangle > 180)
+    gyroXangle = kalAngleX;
+  if (gyroYangle < -180 || gyroYangle > 180)
+    gyroYangle = kalAngleY;
+    */
+  //boardAngle = -kalAngleX;  //angle estimate to use. For some reason the calculated angle is inverted. I might be using the gyro wrong, but this is how i prefer. 
+  boardAngle = imu.roll;
+  if(boardAngle > 180) {
+    boardAngle = boardAngle-360;
+  }
+  //LOG_PORT.print(", bA: ");
+  LOG_PORT.println(boardAngle); 
+  
+  
   
 }
 
@@ -385,7 +461,7 @@ bool initIMU(void)
   }
   // Add accel and quaternion's to the DMP
   dmpFeatureMask |= DMP_FEATURE_SEND_RAW_ACCEL;
-  //dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
+  dmpFeatureMask |= DMP_FEATURE_6X_LP_QUAT;
 
   // Initialize the DMP, and set the FIFO's update rate:
   imu.dmpBegin(dmpFeatureMask, fifoRate);

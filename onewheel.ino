@@ -9,17 +9,18 @@ double prevTime = 0;
 double errorAccumulated = 0;
 double previousError = 0;
 double deltaError = 0;
-volatile double kP = 500;
+volatile double kP = 2.0;
 volatile double kI = 0;
-double iMax = 10;
+double iMax = 0;
 volatile double kD = 0;
 double currentSpeed = 0;
 double throttlePedal = 0.0;
-double overallGain = 0.22;
+double overallGain = 0;
 double motorOutput = 0;
 double calcedMotorOutput = 0;
 double allowableChangePerCycle = 10; // rpm
 double prevMotorSpeed = 0;
+bool motorEnabled = true;
 
 // motor parameters
 double maxCurrent = 15; // amps
@@ -103,7 +104,8 @@ void loop() {
   if(LOG_PORT.available()) {
     mySerialEvent();
   }
-  
+
+  //boardState = riding;
 	switch (boardState) {
 	    case waitingForRider:
 	      doWaitForRider();
@@ -192,6 +194,10 @@ int tippedMaxTime = 500;
 bool wasTippedLastCycle = false;;
 long timeTipped = millis();
 
+int rolledMaxTime = 500;
+bool wasRolledLastCycle = false;
+long timeRolled = millis();
+
 int startupStiffeningTime = 1000;
 long timeStartedRiding = millis();
 
@@ -242,33 +248,28 @@ void doRiding() {
     wasTippedLastCycle = false;
   }
 
+  if(abs(getBoardRoll() > 20)) {
+    if(!wasRolledLastCycle) {
+      timeRolled = millis();
+      wasRolledLastCycle = true;
+    } else if(millis() - timeRolled > rolledMaxTime) {
+      LOG_PORT.println("!!!BOARD ROLLED TOO FAR!!!   returning to waiting for rider");
+      boardState = justStopped;
+      setMotorRPM(0);
+      return;
+    }
+  } else {
+    wasRolledLastCycle = false;
+  }
 
-  
-
-
-  
-	//double motorSpeed = calcMotorSpeedOutput(getBoardPitch());
-  //if(abs(prevMotorSpeed - motorSpeed) > allowableChangePerCycle) {
-    //motorSpeed = prevMotorSpeed + (allowableChangePerCycle*sign(motorSpeed - prevMotorSpeed));
-    
-    /*if(motorSpeed > prevMotorSpeed) {
-      motorSpeed = prevMotorSpeed + allowableChangePerCycle;
-    } else {
-      motorSpeed = prevMotorSpeed - allowableChangePerCycle;
-    } */
-  //}
- 
-  //setMotorRPM(motorSpeed);
-
-  double motorSpeed = calcMotorDutyCycle();
-  
+  double motorSpeed = kP*scaleClipped(boardAngle, -30,30, -1.0, 1.0); 
+  //motorSpeed = constrain(motorSpeed, -1.0, 1.0);
   prevMotorSpeed = motorSpeed;
-  //double motorCurrent = calcMotorOutput(getBoardPitch());
-  //setMotorCurrent(motorCurrent);
   setMotorDutyCycle(motorSpeed);
-  
+  //LOG_PORT.print(", angle: ");
+  //LOG_PORT.print(boardAngle);
   //LOG_PORT.print(", dutyCycle: ");
-  //LOG_PORT.print(motorSpeed);
+  //LOG_PORT.println(motorSpeed);
 }
 
 long timeStopped = millis();
@@ -311,43 +312,6 @@ bool isIMUworking() {
 	return true;
 }
 
-double calcMotorSpeedOutput(double _boardAngle) {
-	// current system state
-	previousError = error;
-	error = squareMaintainSign(_boardAngle*0.01)*100;
-	deltaError = error - previousError;
-
-	deltaTime = micros() - prevTime;
-	prevTime = micros();
-
-	errorAccumulated += error;
-	if(abs(errorAccumulated) > iMax) {
-		errorAccumulated = iMax * sign(errorAccumulated);
-	}
-	if(sign(error) != sign(previousError)){
-		errorAccumulated = 0;
-	}
-
-	// calculate output
-	return motorOutput = kP*error + kI*errorAccumulated + kD*deltaError/deltaTime;
-}
-
-double calcMotorDutyCycle() {
-  float angleRads = boardAngle*0.017453;
-  float balanceTorque = (float)(4.5*angleRads) + (0.5*gyroRateRads);
-  //LOG_PORT.print(", balTorque: ");
-  //LOG_PORT.print(balanceTorque);
-  currentSpeed = (float)(currentSpeed + (throttlePedal*balanceTorque*deltaTime*0.000001)) * 0.999;
-  //LOG_PORT.print(", curSpeed: ");
-  //LOG_PORT.print(currentSpeed);
-  motorOutput = (balanceTorque + currentSpeed) * overallGain;
-  //LOG_PORT.print(", motorOutput: ");
-  //LOG_PORT.print(motorOutput);
-  motorOutput = limitValue(motorOutput, 0.7, -0.7);
-  return motorOutput;
-  
-}
-
 
 bool shouldRide() {
   
@@ -373,10 +337,10 @@ void mySerialEvent() {
       LOG_PORT.println(kP);
       break;
 
-    case 'i':
-      kI = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("kI: ");
-      LOG_PORT.println(kI);
+    case 'e':
+      motorEnabled = !motorEnabled;
+      LOG_PORT.print("motorEnabled: ");
+      LOG_PORT.println(motorEnabled);
       break;
 
     case 'd':
@@ -438,14 +402,14 @@ void mySerialEvent() {
     default:
       LOG_PORT.print("new input data not processed: ");
       LOG_PORT.println(data);
-      LOG_PORT.print("overallGain: ");
-      LOG_PORT.println(overallGain);
-      LOG_PORT.print("throttlePedal: ");
+      LOG_PORT.print("kP: ");
+      LOG_PORT.println(kP);
+      /*LOG_PORT.print("throttlePedal: ");
       LOG_PORT.println(throttlePedal);
       LOG_PORT.print("boardAngle: ");
       LOG_PORT.println(boardAngle);
       LOG_PORT.print("currentSpeed: ");
-      LOG_PORT.println(currentSpeed);
+      LOG_PORT.println(currentSpeed); */
       LOG_PORT.print("boardState: ");
       LOG_PORT.println((String)boardState);
       
