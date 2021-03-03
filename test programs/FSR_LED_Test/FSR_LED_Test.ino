@@ -1,4 +1,4 @@
-//#define Serial SERIAL_PORT_USBVIRTUAL
+#define Serial SERIAL_PORT_USBVIRTUAL
 
 
 #include <FastLED.h>
