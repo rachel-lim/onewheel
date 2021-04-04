@@ -1,18 +1,101 @@
+//#define Serial SERIAL_PORT_USBVIRTUAL
+
+
+//#include <FastLED.h>
+
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
-#define NUM_LEDS 17
+
+// Which pin on the Arduino is connected to the NeoPixels?
+// On a Trinket or Gemma we suggest changing this to 1:
+#define LED_PIN    10
+#define LED_PIN_2    11
+
+// How many NeoPixels are attached to the Arduino?
+#define NUM_LEDS 18
+
+// Declare our NeoPixel strip object:
+Adafruit_NeoPixel leds(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel leds2(NUM_LEDS, LED_PIN_2, NEO_GRB + NEO_KHZ800);
+
 
 #define FRONT_FSR_PIN A2
 #define REAR_FSR_PIN A1
 
-#define LED_PIN 10
-#define LED_PIN_2 11
 
-// Define the array of leds
-Adafruit_NeoPixel leds(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel leds2(NUM_LEDS, LED_PIN_2, NEO_GRB + NEO_KHZ800);
+// timing variables
+long startTime = 0;
+long endTime = 0;
+int timingCycleCounter = 0;
+int TIMED_CYCLES = 100;
+long avgTime = 0;
+long totalTime = 0;
+float frequency = 0; // Hz
+
+void setup() { 
+  Serial.begin(115200);
+
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+  // END of Trinket-specific code.
+
+  leds.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  leds.show();            // Turn OFF all pixels ASAP
+  leds.setBrightness(255); // Set BRIGHTNESS (max = 255)     
+
+  leds2.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  leds2.show();            // Turn OFF all pixels ASAP
+  leds2.setBrightness(255); // Set BRIGHTNESS (max = 255)     
+
+}
+
+void loop() { 
+  if(timingCycleCounter == 0) { // first run
+    startTime = micros();
+    timingCycleCounter++;
+  } else if(timingCycleCounter >= TIMED_CYCLES) { // finished test, report output and reset
+    endTime = micros();
+    totalTime = endTime - startTime;
+    frequency = (float)TIMED_CYCLES / totalTime * 1000000;
+    avgTime = totalTime / TIMED_CYCLES;
+    Serial.print(TIMED_CYCLES);
+    Serial.print(" cycles averaged ");
+    Serial.print(avgTime);
+    Serial.print(" microseconds per loop resulting in ");
+    Serial.print(frequency);
+    Serial.println(" Hz");
+    timingCycleCounter = 0;
+  } else { // middle of testing
+    timingCycleCounter++;
+  }
+
+  //updateBounceFront(0xff, 0, 0, 1, 50, 20);
+  //updateBounceRear(0xff, 0, 0, 1, 50, 20);
+  //updateBounceSynced(128, 0, 128, 1, 50, 20);
+  
+  //fadeFrontInOut(0xff, 0x77, 0x00, 2000);
+  //fadeRearInOut(0xff, 0, 0, 1000);
+  fadeSyncedInOut(128, 0, 128, 1000);
+  
+  
+  /*
+  Serial.print(analogRead(FRONT_FSR_PIN));
+  Serial.print(", ");
+  Serial.println(analogRead(REAR_FSR_PIN));
+  */
+  
+  leds.show();
+  leds2.show();  
+  //Serial.println("LEDs off");
+  //delay(100);
+}
+
+boolean isFSRTriggered(int pin) {
+  return analogRead(pin) > 900;
+}
 
 // global to routines
 bool newFrontRoutine = true;
@@ -21,121 +104,6 @@ bool newRearRoutine = true;
 int rearIdx = 0;
 bool newSyncRoutine = true;
 int syncIdx = 0;
-
-void updateBounceFront(byte red, byte green, byte blue, int eyeSize, int speedDelay, int returnDelay);
-void updateBounceRear(byte red, byte green, byte blue, int eyeSize, int speedDelay, int returnDelay);
-void updateBounceSynced(byte red, byte green, byte blue, int eyeSize, int speedDelay, int returnDelay);
-
-void fadeSyncedInOut(byte red, byte green, byte blue, long fadeTimeMillis);
-void fadeRearInOut(byte red, byte green, byte blue, long fadeTimeMillis);
-void fadeFrontInOut(byte red, byte green, byte blue, long fadeTimeMillis);
-
-void setFrontPixel(int Pixel, byte red, byte green, byte blue);
-void setRearPixel(int Pixel, byte red, byte green, byte blue);
-
-void setFrontAll(byte red, byte green, byte blue);
-void setRearAll(byte red, byte green, byte blue);
-
-void setupLEDs() {
-  leds.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-  leds.show();            // Turn OFF all pixels ASAP
-  leds.setBrightness(255); // Set BRIGHTNESS (max = 255)     
-
-  leds2.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-  leds2.show();            // Turn OFF all pixels ASAP
-  leds2.setBrightness(255); // Set BRIGHTNESS (max = 255)     
-}
-
-int waitingNewFootState = 0;
-int waitingNewFootPreviousState = 0;
-
-void updateLEDs() {
-  if(prevBoardState != boardState) {
-    newFrontRoutine = true;
-    newRearRoutine = true;
-    leds.setBrightness(255);
-    leds2.setBrightness(255);
-    Serial.print(", new mode: ");
-    Serial.println(boardState);
-  }
-
-  switch(boardState) {
-    case waitingForRider:
-      if(!isFrontFSRTriggered && !isRearFSRTriggered) { // no footpads detected
-        waitingNewFootState = 1;
-        if(waitingNewFootState != waitingNewFootPreviousState) {
-          leds.setBrightness(255);
-          leds2.setBrightness(255);
-          waitingNewFootPreviousState = waitingNewFootState;
-        }
-        fadeSyncedInOut(128,0,128,1500);
-        //LOG_PORT.print(", wait for rider, no footpads");
-      } else if(isFrontFSRTriggered && !isRearFSRTriggered) { // only front footpad detected
-        waitingNewFootState = 2;
-        if(waitingNewFootState != waitingNewFootPreviousState) {
-          leds.setBrightness(255);
-          leds2.setBrightness(255);
-          waitingNewFootPreviousState = waitingNewFootState;
-        }
-        fadeFrontInOut(128,0,128,500);
-        updateBounceRear(128,0,128,1,50,20);
-        //LOG_PORT.print(", wait for rider, front footpad");
-      } else if(isRearFSRTriggered && !isFrontFSRTriggered) { // only rear footpad detected
-        waitingNewFootState = 3;
-        if(waitingNewFootState != waitingNewFootPreviousState) {
-          leds.setBrightness(255);
-          leds2.setBrightness(255);
-          waitingNewFootPreviousState = waitingNewFootState;
-        }
-        fadeRearInOut(128,0,128,500);
-        updateBounceFront(128,0,128,1,50,20);
-        //LOG_PORT.print(", wait for rider, rear footpad");
-      } else { // both FSRs triggered, but still tipped 
-        waitingNewFootState = 4;
-        if(waitingNewFootState != waitingNewFootPreviousState) {
-          leds.setBrightness(255);
-          leds2.setBrightness(255);
-          waitingNewFootPreviousState = waitingNewFootState;
-        }
-        updateBounceSynced(0,255,0,1,50,20);
-        //LOG_PORT.print(", wait for rider, both footpads");
-      }
-      break;
-    case riding:
-      //LOG_PORT.print(", riding");
-      setFrontAll(0,0,0);
-      setRearAll(0,0,0);
-      if(boardAngle > 2) {
-        setFrontAll(255,255,255);
-        setRearAll(255,0,0);
-      } else if(boardAngle < -2) {
-        setFrontAll(255,0,0);
-        setRearAll(255,255,255);
-      } else {
-        setFrontAll(255,255,255);
-        setRearAll(255,255,255);
-      }
-      break;
-    case justStopped:
-      //LOG_PORT.print(", just stopped");
-      fadeSyncedInOut(255,165,0,500);
-      break;
-    case limpMode:
-      
-      break;
-    case slowStop:
-      
-      break;
-    case detectedError:
-      
-      break;
-    default:
-      break;
-  }
-  
-  leds.show();
-  leds2.show();
-}
 
 
 // front bouncing LEDs
@@ -410,6 +378,37 @@ void fadeRearInOut(byte red, byte green, byte blue, long fadeTimeMillis) {
 // fade in/out synced
 bool fadeSyncDirection = true;
 
+/*void fadeSyncedInOut(byte red, byte green, byte blue, long fadeTimeMillis) {
+  if(newSyncRoutine) { // just changed routine
+    prevSyncTime = millis();
+    fadeSyncDirection = true;
+    newSyncRoutine = false;
+  }
+
+  if(millis()-prevSyncTime > fadeTimeMillis) { // full fade happened, switch directions
+    fadeSyncDirection = !fadeSyncDirection;
+    prevSyncTime = millis();
+  }
+  
+  float r, g, b;
+  float brightness = 0;
+  if(fadeSyncDirection) { // brighten the lights
+    brightness = (float)(millis()-prevSyncTime)/fadeTimeMillis;
+    r = brightness*red;
+    g = brightness*green;
+    b = brightness*blue;
+    setFrontAll(r,g,b);
+    setRearAll(r,g,b);
+  } else { // dim the lights
+    brightness = 1.0 - (float)(millis()-prevSyncTime)/fadeTimeMillis;
+    r = brightness*red;
+    g = brightness*green;
+    b = brightness*blue;
+    setFrontAll(r,g,b);
+    setRearAll(r,g,b);
+  }
+} */
+
 void fadeSyncedInOut(byte red, byte green, byte blue, long fadeTimeMillis) {
   if(newSyncRoutine) { // just changed routine
     prevSyncTime = millis();
@@ -438,9 +437,11 @@ void fadeSyncedInOut(byte red, byte green, byte blue, long fadeTimeMillis) {
   }
 }
 
+
+
 void setFrontPixel(int Pixel, byte red, byte green, byte blue) {
-   // make sure a valid pixel
-  Pixel = Pixel > NUM_LEDS ? NUM_LEDS : Pixel;
+   // FastLED
+   Pixel = Pixel > NUM_LEDS ? NUM_LEDS : Pixel;
    Pixel = Pixel < 0 ? 0 : Pixel;
    
    leds.setPixelColor(Pixel, leds.Color(red, green, blue));
@@ -453,7 +454,7 @@ void setFrontAll(byte red, byte green, byte blue) {
 }
 
 void setRearPixel(int Pixel, byte red, byte green, byte blue) {
-   // make sure a valid pixel
+   // FastLED
    Pixel = Pixel > NUM_LEDS ? NUM_LEDS : Pixel;
    Pixel = Pixel < 0 ? 0 : Pixel;
    

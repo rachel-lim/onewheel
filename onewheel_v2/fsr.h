@@ -1,8 +1,8 @@
-#define FRONT_FSR_PIN A1
-#define BACK_FSR_PIN A2
+#define FRONT_FSR_PIN A2
+#define BACK_FSR_PIN A1
 
 
-#define FSRThreshhold 900;
+int FSRThreshhold = 700;
 
 // use these variables rather than reading the pin every time!!!
 bool isFrontFSRTriggered = false;
@@ -12,9 +12,22 @@ bool _isRearFSRTriggered();
 
 
 
-void updateFSRs() {
+void updateFSRs(bool shouldPrint) {
   isFrontFSRTriggered = _isFrontFSRTriggered();
   isRearFSRTriggered = _isRearFSRTriggered();
+
+  if(shouldPrint) {
+    LOG_PORT.print(", ");
+    LOG_PORT.print(isFrontFSRTriggered);
+    LOG_PORT.print(", ");
+    LOG_PORT.print(isRearFSRTriggered); 
+    /*LOG_PORT.print(", ");
+    LOG_PORT.print(analogRead(FRONT_FSR_PIN));
+    LOG_PORT.print(", ");
+    LOG_PORT.print(analogRead(BACK_FSR_PIN)); */
+    
+  }
+  
 }
 
 
@@ -28,5 +41,5 @@ bool _isRearFSRTriggered() {
 }
 
 boolean isFSRTriggered(int pin) {
-  return analogRead(pin) > 900;
+  return analogRead(pin) > FSRThreshhold;
 }

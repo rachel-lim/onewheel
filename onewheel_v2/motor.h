@@ -2,18 +2,29 @@
 #include <VescUart.h>
 
 /** Initiate VescUart class */
-VescUart UART;
+VescUart UARTVesc;
 int VESCfailCounter = 0;
 int VESCmaxFailCount = 10;
 
-float rpmScaler = 14.28571429;
+float rpmScaler = 15; // number of pole pairs
+
+float vescRPM = 0;
+float vescInpVoltage = 0;
+float vescAmpHours = 0;
+float vescTachAbs = 0;
+float vescTach = 0;
+float vescAvgMotorCurrent = 0;
+float vescAvgInputCurrent = 0;
+float dutyCycleNow = 0;
+float vescAmpHoursCharged = 0;
+
 
 void setupMotor() {
   /** Setup UART port (Serial1 on Atmega32u4) */
   Serial1.begin(115200);
   
   /** Define which ports to use as UART */
-  UART.setSerialPort(&Serial1);
+  UARTVesc.setSerialPort(&Serial1);
 
   //UART.setCurrent(30);
 }
@@ -44,12 +55,12 @@ void updateMotor() {
 void setMotorRPM(float rpm) {
   rpm = rpm*rpmScaler;
   
-  if(rpm > 7000) {
-    rpm = 7000;
-  } else if(rpm < -7000) {
-    rpm = -7000;
+  if(rpm > 7500) {
+    rpm = 7500;
+  } else if(rpm < -7500) {
+    rpm = -7500;
   }
-  UART.setRPM(rpm);
+  UARTVesc.setRPM(rpm);
 }
 
 void setMotorCurrent(float current) {
@@ -58,10 +69,33 @@ void setMotorCurrent(float current) {
   } else if(current < -30) {
     current = -30;
   }
-  UART.setCurrent(current);
+  UARTVesc.setCurrent(current);
 }
 
 void setMotorDutyCycle(float dutyCycle) {
   dutyCycle = limitValue(dutyCycle, 1.0, -1.0);
-  UART.setDuty(dutyCycle);
+  UARTVesc.setDuty(dutyCycle);
+}
+
+
+// USE ONLY WHEN NOT RIDING!!!! TIME EXPENSIVE FUNCTION!!!
+void updateMotorVals(bool shouldPrint) {
+  if(UARTVesc.getVescValues()) {
+    vescRPM = UARTVesc.data.rpm;
+    vescInpVoltage = UARTVesc.data.inpVoltage;
+    vescAmpHours = UARTVesc.data.ampHours;
+    vescTachAbs = UARTVesc.data.tachometerAbs;
+    vescTach = UARTVesc.data.tachometer;
+    vescAvgMotorCurrent = UARTVesc.data.avgMotorCurrent;
+    vescAvgInputCurrent = UARTVesc.data.avgInputCurrent;
+    dutyCycleNow = UARTVesc.data.dutyCycleNow;
+    vescAmpHoursCharged = UARTVesc.data.ampHoursCharged;
+    //vescAmpHoursCharged = UARTVesc.mc_values.amp_hours_charged;
+    //vescTemp = UARTVesc.data.temperature;
+    if(shouldPrint) {
+      LOG_PORT.println("Successfully read VESC Values");
+    }
+  } else if(shouldPrint) {
+    LOG_PORT.println(", FAILED TO READ VALUES FROM VESC!");
+  }
 }

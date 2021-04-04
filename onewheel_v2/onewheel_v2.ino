@@ -1,133 +1,143 @@
 #include "util.h"
 #include "MathUtil.h"
 
+#define LOG_PORT Serial
+
 double boardAngle = 0;
-double error = 0;
+//double angleError = 0;
 //double time = micros();
-double deltaTime = 0;
-double prevTime = 0;
-double errorAccumulated = 0;
-double previousError = 0;
-double deltaError = 0;
-volatile double kP = 2.0;
+//double deltaTime = 0;
+//double prevTime = 0;
+//double errorAccumulated = 0;
+//double previousError = 0;
+//double deltaError = 0;
+volatile double kP = 3.25; // old default was 2.0
+volatile double kPExp = 2;
+bool useExponentialKp = false;
 volatile double kI = 0;
 double iMax = 0;
 volatile double kD = 0;
 double currentSpeed = 0;
-double throttlePedal = 0.0;
-double overallGain = 0;
-double motorOutput = 0;
-double calcedMotorOutput = 0;
-double allowableChangePerCycle = 10; // rpm
+//double throttlePedal = 0.0;
+//double overallGain = 0;
+//double motorOutput = 0;
+double maxMotorDutyCycle = 1.0;
+//double calcedMotorOutput = 0;
+double allowableChangePerCycle = 0.01; // duty cycle
+//bool useRateChangeLimit = false;
+
 double prevMotorSpeed = 0;
-bool motorEnabled = true;
+int boardStartRidingAngle = 10;
 
 // motor parameters
-double maxCurrent = 15; // amps
-double maxSpeed = 25; // f/s
-double wheelDiameterIn = 10;
-double maxRPM = maxSpeed*12*60/3.14/wheelDiameterIn;
+//double maxCurrent = 15; // amps
+//double maxSpeed = 25; // f/s
+//double wheelDiameterIn = 10;
+//double maxRPM = maxSpeed * 12 * 60 / 3.14 / wheelDiameterIn;
 
 bool hasStartedRiding = false;
 bool invertLEDsOnStartup = true;
 
-enum BoardState{
-	booting,
-	waitingForRider,
-	riding,
+enum BoardState {
+  booting,
+  waitingForRider,
+  riding,
   justStopped,
-	limpMode,
-	slowStop,
-	detectedError
+  limpMode,
+  slowStop,
+  detectedError
 };
 
 BoardState boardState = booting;
 BoardState prevBoardState = booting;
 
-// comment out when ready for logging
-#define LOG_PORT SERIAL_PORT_USBVIRTUAL
 
 #include "IMU.h"
 #include "battery.h"
 #include "fsr.h"
 #include "leds.h"
 #include "motor.h"
+#include "BLEcomms.h"
+
+void mySerialEvent();
 
 
 void setup() {
-	boardState = booting;
+  boardState = booting;
   LOG_PORT.begin(115200);
-	// initialize LEDs
 
+  // initialize LEDs
   setupLEDs();
-	// quick flash LEDs
-	for(int i=0; i<3; i++) {
-    setFrontLEDs(100,0,100);
-    setRearLEDs(100,0,100);
+
+  // quick flash LEDs
+  for (int i = 0; i < 3; i++) {
+    setFrontAll(100, 0, 100);
+    setRearAll(100, 0, 100);
+    leds.show();
+    leds2.show();
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
-    setFrontLEDs(0,0,0);
-    setRearLEDs(0,0,0);
+    setFrontAll(0, 0, 0);
+    setRearAll(0, 0, 0);
+    leds.show();
+    leds2.show();
     digitalWrite(LED_BUILTIN, LOW);
     delay(100);
-	}
- 
+  }
 
-	// start LEDs chasing
-	// initialize IMU
+
+  // start LEDs chasing
+  // initialize IMU
   setupIMU();
-	// intialize VESC
+  // intialize VESC
   setupMotor();
 
-	boardState = waitingForRider;
+  // initialize BLE
+  setupBLE();
+
+  boardState = waitingForRider;
 }
 
 
 
 void loop() {
-	// run updates of sensors, etc
-  updateIMU();
+  // run updates of sensors, etc
+  updateIMU(false);
   updateBattVoltage(false);
-  updateFSRs();
+  updateFSRs(false);
   //updateMotor();
   //LOG_PORT.print(millis());
-  //LOG_PORT.print(", p: ");
-  //LOG_PORT.print(getBoardPitch());
-  //LOG_PORT.print(boardAngle);
-  /*LOG_PORT.print(" r: ");
-  LOG_PORT.print(getBoardRoll());
-  LOG_PORT.print(" y: ");
-  LOG_PORT.print(getBoardHeading());*/
-  //LOG_PORT.print("board state: ");
-  //LOG_PORT.println(boardState);
+  //LOG_PORT.print(" board state: ");
+  //LOG_PORT.print(boardState);
 
-  if(LOG_PORT.available()) {
+  if (LOG_PORT.available()) {
     mySerialEvent();
   }
 
   //boardState = riding;
-	switch (boardState) {
-	    case waitingForRider:
-	      doWaitForRider();
-	      break;
-	    case riding:
-	      doRiding();
-	      break;
-      case justStopped:
-        doJustStopped();
-        break;
-	    case limpMode:
-	      // do something
-	      break;
-	    case slowStop:
-	      // do something
-	      break;
-	    case detectedError:
-	      // do something
-	      break;
-	    default:
-	      boardState = detectedError;
-	}
+  switch (boardState) {
+    case waitingForRider:
+      doWaitForRider();
+      break;
+    case riding:
+      doRiding();
+      break;
+    case justStopped:
+      doJustStopped();
+      break;
+    case limpMode:
+      // do something
+      break;
+    case slowStop:
+      // do something
+      break;
+    case detectedError:
+      // do something
+      break;
+    default:
+      boardState = detectedError;
+      break;
+  }
 
   updateLEDs();
   //LOG_PORT.println();
@@ -147,10 +157,10 @@ long totalTime = 0;
 float frequency = 0; // Hz
 
 void runFrequencyTimingCheck() {
-  if(timingCycleCounter == 0) { // first run
+  if (timingCycleCounter == 0) { // first run
     startTime = micros();
     timingCycleCounter++;
-  } else if(timingCycleCounter >= TIMED_CYCLES) { // finished test, report output and reset
+  } else if (timingCycleCounter >= TIMED_CYCLES) { // finished test, report output and reset
     endTime = micros();
     totalTime = endTime - startTime;
     frequency = (float)TIMED_CYCLES / totalTime * 1000000;
@@ -169,17 +179,25 @@ void runFrequencyTimingCheck() {
 }
 
 void doWaitForRider() {
-	currentSpeed = 0;
- 
-	// monitor FSRs
-	if(isFrontFSRTriggered && isRearFSRTriggered) {
-		if(abs(boardAngle) < 10) {
-			boardState = riding;
-      
-		}
-	}
+  // update BLE stuff
+  updateMotorVals(false);
+  updateBLE();
+  readBLEVars();
+  publishRegularBLE();
 
-  setMotorDutyCycle(0.0);
+
+
+  // monitor FSRs
+  if (isFrontFSRTriggered && isRearFSRTriggered) {
+    LOG_PORT.print(", both FSRs triggered");
+    if (abs(getBoardPitch()) < boardStartRidingAngle) {
+      boardState = riding;
+      LOG_PORT.print(", triggering riding");
+    }
+  }
+
+  //setMotorDutyCycle(0.0);
+  currentSpeed = 0;
 
   hasStartedRiding = false;
   prevMotorSpeed = 0;
@@ -204,26 +222,12 @@ long timeStartedRiding = millis();
 
 void doRiding() {
 
-  if(!hasStartedRiding) {
-
-    
-    if(abs(boardAngle) > 1) {
-      invertLEDsOnStartup = true;
-      return;
-    } else {
-      hasStartedRiding = true;
-      invertLEDsOnStartup = false;
-      wasMissingFeetLastCycle = false;
-      wasTippedLastCycle = false;
-    }
-  }
-  
   // both feet are not firmly on the board
-  if(!isFrontFSRTriggered || !isRearFSRTriggered) {
-    if(!wasMissingFeetLastCycle) {
+  if (!isFrontFSRTriggered || !isRearFSRTriggered) {
+    if (!wasMissingFeetLastCycle) {
       wasMissingFeetLastCycle = true;
       timeFeetLost = millis();
-    } else if(millis() - timeFeetLost > missingFootMaxTime) { // rider appears to have fallen off
+    } else if (millis() - timeFeetLost > missingFootMaxTime) { // rider appears to have fallen off
       LOG_PORT.println("!!!RIDER MISSING FEET!!!   returning to waiting for rider");
       boardState = justStopped;
       setMotorRPM(0);
@@ -233,12 +237,27 @@ void doRiding() {
     wasMissingFeetLastCycle = false;
   }
 
+  // if we have not yet tried to level the board, set LEDs correctly
+  if (!hasStartedRiding) {
+    if (abs(boardAngle) > 1) {
+      invertLEDsOnStartup = true;
+      return;
+    } else {
+      hasStartedRiding = true;
+      invertLEDsOnStartup = false;
+      wasMissingFeetLastCycle = false;
+      wasTippedLastCycle = false;
+    }
+  }
+
+
+
   // board angle exceeds acceptable riding angle (likely fallen over)
-  if(abs(boardAngle) > 18) {
-    if(!wasTippedLastCycle) {
+  if (abs(boardAngle) > 18) {
+    if (!wasTippedLastCycle) {
       timeTipped = millis();
       wasTippedLastCycle = true;
-    } else if(millis() - timeTipped > tippedMaxTime){
+    } else if (millis() - timeTipped > tippedMaxTime) {
       LOG_PORT.println("!!!BOARD TIPPED TOO FAR!!!   returning to waiting for rider");
       boardState = justStopped;
       setMotorRPM(0);
@@ -248,11 +267,11 @@ void doRiding() {
     wasTippedLastCycle = false;
   }
 
-  if(abs(getBoardRoll() > 20)) {
-    if(!wasRolledLastCycle) {
+  if (abs(getBoardRoll()) > 20) {
+    if (!wasRolledLastCycle) {
       timeRolled = millis();
       wasRolledLastCycle = true;
-    } else if(millis() - timeRolled > rolledMaxTime) {
+    } else if (millis() - timeRolled > rolledMaxTime) {
       LOG_PORT.println("!!!BOARD ROLLED TOO FAR!!!   returning to waiting for rider");
       boardState = justStopped;
       setMotorRPM(0);
@@ -262,8 +281,14 @@ void doRiding() {
     wasRolledLastCycle = false;
   }
 
-  double motorSpeed = kP*scaleClipped(boardAngle, -30,30, -1.0, 1.0); 
-  //motorSpeed = constrain(motorSpeed, -1.0, 1.0);
+  double motorSpeed = 0;
+
+  if(!useExponentialKp) {
+    motorSpeed = kP * scaleClipped(boardAngle, -30, 30, -1.0, 1.0);
+  } else {
+    motorSpeed = pow(abs(boardAngle),kPExp) * 2 / 60 * sign(boardAngle);
+  }
+  motorSpeed = constrain(motorSpeed, -maxMotorDutyCycle, maxMotorDutyCycle);
   prevMotorSpeed = motorSpeed;
   setMotorDutyCycle(motorSpeed);
   //LOG_PORT.print(", angle: ");
@@ -274,16 +299,18 @@ void doRiding() {
 
 long timeStopped = millis();
 long prevTimeStopped = millis();
-long timeToStop = 1000;
+long timeToStop = 5000;
 
 void doJustStopped() {
-  if(millis() - prevTimeStopped > 100) { // long delay since last time we were here, assume we just stopped
+
+  setMotorDutyCycle(0.0);
+  if (millis() - prevTimeStopped > 100) { // long delay since last time we were here, assume we just stopped
     timeStopped = millis();
   }
-  
+
   prevTimeStopped = millis();
-    
-  if(!isFrontFSRTriggered || !isRearFSRTriggered && (millis() > timeStopped + timeToStop)) {
+
+  if ((!isFrontFSRTriggered || !isRearFSRTriggered) && (millis() > timeStopped + timeToStop)) {
     boardState = waitingForRider;
   }
 }
@@ -303,18 +330,18 @@ void doError() {
 
 
 bool isVESCconnected() {
-	// TODO
-	return true;
+  // TODO
+  return true;
 }
 
 bool isIMUworking() {
-	// TODO
-	return true;
+  // TODO
+  return true;
 }
 
 
 bool shouldRide() {
-  
+
 }
 
 void mySerialEvent() {
@@ -324,13 +351,13 @@ void mySerialEvent() {
   delay(50); // used to ensure the full serial line has appeared and is available
 
   while (LOG_PORT.available()) {
-      // get the new byte:
-      char inChar = (char)LOG_PORT.read();
-      // add it to the myString:
-      data += inChar;
+    // get the new byte:
+    char inChar = (char)LOG_PORT.read();
+    // add it to the myString:
+    data += inChar;
   }
-  
-  switch(data.charAt(0)) {
+
+  switch (data.charAt(0)) {
     case 'p':
       kP = data.substring(indexOfFirstNumber(data)).toFloat();
       LOG_PORT.print("kP: ");
@@ -338,15 +365,15 @@ void mySerialEvent() {
       break;
 
     case 'e':
-      motorEnabled = !motorEnabled;
-      LOG_PORT.print("motorEnabled: ");
-      LOG_PORT.println(motorEnabled);
+      //motorEnabled = !motorEnabled;
+      //LOG_PORT.print("motorEnabled: ");
+      //LOG_PORT.println(motorEnabled);
       break;
 
     case 'd':
-      kD = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("kD: ");
-      LOG_PORT.println(kD);
+      //kD = data.substring(indexOfFirstNumber(data)).toFloat();
+      //LOG_PORT.print("kD: ");
+      //LOG_PORT.println(kD);
       break;
 
     case 'a':
@@ -356,21 +383,21 @@ void mySerialEvent() {
       break;
 
     case 'x':
-      iMax = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("iMax: ");
-      LOG_PORT.println(iMax);
+      //iMax = data.substring(indexOfFirstNumber(data)).toFloat();
+      //LOG_PORT.print("iMax: ");
+      //LOG_PORT.println(iMax);
       break;
 
     case 'o':
-      overallGain = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("overallGain: ");
-      LOG_PORT.println(overallGain);
+      //overallGain = data.substring(indexOfFirstNumber(data)).toFloat();
+      //LOG_PORT.print("overallGain: ");
+      //LOG_PORT.println(overallGain);
       break;
 
     case 't':
-      throttlePedal = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("throttlePedal: ");
-      LOG_PORT.println(throttlePedal);
+      //throttlePedal = data.substring(indexOfFirstNumber(data)).toFloat();
+      //LOG_PORT.print("throttlePedal: ");
+      //LOG_PORT.println(throttlePedal);
       break;
 
     case 'm':
@@ -386,7 +413,7 @@ void mySerialEvent() {
       break;
 
     case 'l':
-      LOG_PORT.println("LOG AND DIAGNOSTIC DATA"); 
+      LOG_PORT.println("LOG AND DIAGNOSTIC DATA");
       LOG_PORT.print("boardAngle: ");
       LOG_PORT.println(boardAngle);
       LOG_PORT.print("frontFSR: ");
@@ -397,28 +424,28 @@ void mySerialEvent() {
       LOG_PORT.println(getBattVoltage());
       LOG_PORT.print(": ");
       LOG_PORT.println();
-      
-      
+
+
     default:
       LOG_PORT.print("new input data not processed: ");
       LOG_PORT.println(data);
       LOG_PORT.print("kP: ");
       LOG_PORT.println(kP);
       /*LOG_PORT.print("throttlePedal: ");
-      LOG_PORT.println(throttlePedal);
-      LOG_PORT.print("boardAngle: ");
-      LOG_PORT.println(boardAngle);
-      LOG_PORT.print("currentSpeed: ");
-      LOG_PORT.println(currentSpeed); */
+        LOG_PORT.println(throttlePedal);
+        LOG_PORT.print("boardAngle: ");
+        LOG_PORT.println(boardAngle);
+        LOG_PORT.print("currentSpeed: ");
+        LOG_PORT.println(currentSpeed); */
       LOG_PORT.print("boardState: ");
       LOG_PORT.println((String)boardState);
-      
+
   }
 }
 
 int indexOfFirstNumber(String data) {
-  for(int i=0; i<data.length(); i++) {
-    if(isDigit(data.charAt(i))) {
+  for (int i = 0; i < data.length(); i++) {
+    if (isDigit(data.charAt(i))) {
       return i;
     }
   }
@@ -429,5 +456,5 @@ int indexOfFirstNumber(String data) {
 
 template <typename type>
 type sign(type value) {
- return type((value>0)-(value<0));
+  return type((value > 0) - (value < 0));
 }
