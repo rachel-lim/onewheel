@@ -23,6 +23,13 @@ void updateBattVoltage(bool shouldPrint) {
   if(voltageIdx>=10) {
     voltageIdx = 0;
   }
+  
+  battVoltage = 0;
+  for(int i=0; i<10; i++) {
+    battVoltage+=battVoltages[i];
+  }
+
+  battVoltage = battVoltage/10;
 
   if(shouldPrint) {
     LOG_PORT.print(", ");
@@ -33,9 +40,5 @@ void updateBattVoltage(bool shouldPrint) {
 
 
 double getBattVoltage() {
-  for(int i=0; i<10; i++) {
-    battVoltage+=battVoltages[i];
-  }
-
-  battVoltage = battVoltage/10;
+  return battVoltage;
 }

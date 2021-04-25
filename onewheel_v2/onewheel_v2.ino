@@ -4,6 +4,7 @@
 #define LOG_PORT Serial
 
 double boardAngle = 0;
+double targetBoardAngle = 0;
 //double angleError = 0;
 //double time = micros();
 //double deltaTime = 0;
@@ -14,6 +15,8 @@ double boardAngle = 0;
 volatile double kP = 3.25; // old default was 2.0
 volatile double kPExp = 1.6;
 bool useExponentialKp = true;
+bool useDynamicBalance = false;
+double kBalance = 1.6;
 volatile double kI = 0;
 double iMax = 0;
 volatile double kD = 0;
@@ -239,7 +242,7 @@ void doRiding() {
 
   // if we have not yet tried to level the board, set LEDs correctly
   if (!hasStartedRiding) {
-    if (abs(boardAngle) > 1) {
+    if (abs(getBoardPitch()) > 1) {
       invertLEDsOnStartup = true;
       return;
     } else {
@@ -253,7 +256,7 @@ void doRiding() {
 
 
   // board angle exceeds acceptable riding angle (likely fallen over)
-  if (abs(boardAngle) > 18) {
+  if (abs(getBoardPitch()) > 18) {
     if (!wasTippedLastCycle) {
       timeTipped = millis();
       wasTippedLastCycle = true;
@@ -284,15 +287,23 @@ void doRiding() {
   double motorSpeed = 0;
 
   if(!useExponentialKp) {
-    motorSpeed = kP * scaleClipped(boardAngle, -30, 30, -1.0, 1.0);
+    motorSpeed = kP * scaleClipped(getBoardPitch(), -30, 30, -1.0, 1.0);
   } else {
-    motorSpeed = pow(abs(boardAngle),kPExp) * 2 / 60 * sign(boardAngle);
+    motorSpeed = pow(abs(getBoardPitch()),kPExp) * 2 / 60 * sign(getBoardPitch());
   }
+
+  motorSpeed = motorSpeed + (prevMotorSpeed - motorSpeed)*kD;
+
   motorSpeed = constrain(motorSpeed, -maxMotorDutyCycle, maxMotorDutyCycle);
+  
+  //if(useDynamicBalance) {
+  //  targetAngle = abs(pow(motorSpeed-1, 1/kBalance) * -sign(getBoardPitch()));
+  //}
+  
   prevMotorSpeed = motorSpeed;
   setMotorDutyCycle(motorSpeed);
   //LOG_PORT.print(", angle: ");
-  //LOG_PORT.print(boardAngle);
+  //LOG_PORT.print(getBoardPitch());
   //LOG_PORT.print(", dutyCycle: ");
   //LOG_PORT.println(motorSpeed);
 }
