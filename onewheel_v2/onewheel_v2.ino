@@ -17,14 +17,16 @@ volatile double kPExp = 1.6;
 bool useExponentialKp = true;
 bool useDynamicBalance = false;
 double kBalance = 1.6;
-volatile double kI = 0;
-double iMax = 0;
+volatile double kI = 0.0012;
+volatile double kIExp = 2.1;
+bool useExponentialKi = true;
+//double iMax = 0;
 volatile double kD = 0;
 double currentSpeed = 0;
 //double throttlePedal = 0.0;
 //double overallGain = 0;
 //double motorOutput = 0;
-double maxMotorDutyCycle = 1.0;
+double maxMotorDutyCycle = 0.8;
 //double calcedMotorOutput = 0;
 double allowableChangePerCycle = 0.01; // duty cycle
 //bool useRateChangeLimit = false;
@@ -270,6 +272,7 @@ void doRiding() {
     wasTippedLastCycle = false;
   }
 
+  // board has likely rolled over
   if (abs(getBoardRoll()) > 20) {
     if (!wasRolledLastCycle) {
       timeRolled = millis();
@@ -284,17 +287,28 @@ void doRiding() {
     wasRolledLastCycle = false;
   }
 
+
   double motorSpeed = 0;
 
-  if(!useExponentialKp) {
+  /*if(!useExponentialKp) {
     motorSpeed = kP * scaleClipped(getBoardPitch(), -30, 30, -1.0, 1.0);
   } else {
     motorSpeed = pow(abs(getBoardPitch()),kPExp) * 2 / 60 * sign(getBoardPitch());
   }
 
-  motorSpeed = motorSpeed + (prevMotorSpeed - motorSpeed)*kD;
+  
+
+  motorSpeed = motorSpeed + (prevMotorSpeed - motorSpeed)*kD; */
+
+
+  float delta = getBoardPitch() * kI;
+  delta = constrain(delta, -allowableChangePerCycle, allowableChangePerCycle);
+  
+  motorSpeed = currentSpeed + delta;
 
   motorSpeed = constrain(motorSpeed, -maxMotorDutyCycle, maxMotorDutyCycle);
+
+  currentSpeed = motorSpeed;
   
   //if(useDynamicBalance) {
   //  targetAngle = abs(pow(motorSpeed-1, 1/kBalance) * -sign(getBoardPitch()));
@@ -388,9 +402,9 @@ void mySerialEvent() {
       break;
 
     case 'a':
-      allowableChangePerCycle = data.substring(indexOfFirstNumber(data)).toFloat();
-      LOG_PORT.print("accel: ");
-      LOG_PORT.println(allowableChangePerCycle);
+      //allowableChangePerCycle = data.substring(indexOfFirstNumber(data)).toFloat();
+      //LOG_PORT.print("accel: ");
+      //LOG_PORT.println(allowableChangePerCycle);
       break;
 
     case 'x':

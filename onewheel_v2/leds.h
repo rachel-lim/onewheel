@@ -438,6 +438,26 @@ void fadeSyncedInOut(byte red, byte green, byte blue, long fadeTimeMillis) {
   }
 }
 
+
+
+void blinkBlocking(int r, int g, int b, int count, int pauseMillis) {
+  // quick flash LEDs
+  for (int i = 0; i < count; i++) {
+    setFrontAll(r, g, b);
+    setRearAll(r, g, b);
+    leds.show();
+    leds2.show();
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(pauseMillis);
+    setFrontAll(0, 0, 0);
+    setRearAll(0, 0, 0);
+    leds.show();
+    leds2.show();
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(pauseMillis);
+  }
+}
+
 void setFrontPixel(int Pixel, byte red, byte green, byte blue) {
    // make sure a valid pixel
   Pixel = Pixel > NUM_LEDS ? NUM_LEDS : Pixel;
