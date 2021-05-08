@@ -4,8 +4,6 @@
 const char* nameOfPeripheral = "Onewheel";
 
 
-int oldBatteryLevel = 0;  // last battery level reading from analog input
-long previousMillis = 0;  // last time the battery level was checked, in ms
 
 
 BLEService onewheelService("2A66");
@@ -21,9 +19,9 @@ const char * expKPDesc = "exponential kP";
 const char * kIUuid = "2906";
 const char * kIDescVal = "integral gain";
 const char * useExpKIUuid = "2937";
-const char * useExpKIDesc = "use exponential kP";
+const char * useExpKIDesc = "use exponential kI";
 const char * expKIUuid = "2938";
-const char * expKIDesc = "exponential kP";
+const char * expKIDesc = "exponential kI";
 
 const char * allowableChangePerCycleUuid = "2939";
 const char * allowableChangePerCycleDesc = "rate of change";
@@ -77,6 +75,8 @@ BLEDescriptor vescAmpHrsDescriptor(vescAmpHrsUuid, vescAmpHrsDesc);
 long lastBattPublish = 0;
 int battPublishInterval = 1000;
 long currentMillis = 0;
+int oldBatteryLevel = 0;  // last battery level reading from analog input
+long previousMillis = 0;  // last time the battery level was checked, in ms
 
 
 void publishRegularBLE();
@@ -95,34 +95,33 @@ void setupBLE() {
   BLE.setLocalName(nameOfPeripheral);
   BLE.setAdvertisedService(onewheelService);
 
-  //kPDescriptor.setValue(kPDescVal);
-  //kIDescriptor.setValue(kIDescVal);
-  //kDDescriptor.setValue(kDDescVal);
-
+  
   //kPCharacteristic.addDescriptor(kPDescriptor);
   //onewheelService.addCharacteristic(kPCharacteristic);
 
   //useExpKPCharacteristic.addDescriptor(useExpKPDescriptor);
   //onewheelService.addCharacteristic(useExpKPCharacteristic);
 
-  //expKPCharacteristic.addDescriptor(expKPDescriptor);
-  //onewheelService.addCharacteristic(expKPCharacteristic);
+  expKPCharacteristic.addDescriptor(expKPDescriptor);
+  onewheelService.addCharacteristic(expKPCharacteristic);
 
   
-  kICharacteristic.addDescriptor(kIDescriptor);
-  onewheelService.addCharacteristic(kICharacteristic);
+  //kICharacteristic.addDescriptor(kIDescriptor);
+  //onewheelService.addCharacteristic(kICharacteristic);
 
   expKICharacteristic.addDescriptor(expKIDescriptor);
   onewheelService.addCharacteristic(expKICharacteristic);
 
-  useExpKICharacteristic.addDescriptor(useExpKPDescriptor);
-  onewheelService.addCharacteristic(useExpKICharacteristic);
+  //useExpKICharacteristic.addDescriptor(useExpKPDescriptor);
+  //onewheelService.addCharacteristic(useExpKICharacteristic);
 
+  //allowableChangePerCycleDescriptor.setValue(allowableChangePerCycleDesc);
   allowableChangePerCycleCharacteristic.addDescriptor(allowableChangePerCycleDescriptor);
   onewheelService.addCharacteristic(allowableChangePerCycleCharacteristic);
   
-  //kDCharacteristic.addDescriptor(kDDescriptor);
-  //onewheelService.addCharacteristic(kDCharacteristic);
+  //kDDescriptor.setValue(kDDescVal);
+  kDCharacteristic.addDescriptor(kDDescriptor);
+  onewheelService.addCharacteristic(kDCharacteristic);
 
   vescAvgMotorCurCharacteristic.addDescriptor(vescAvgMotorCurDescriptor);
   onewheelService.addCharacteristic(vescAvgMotorCurCharacteristic);
@@ -163,7 +162,7 @@ void updateBLE() {
 
 // update variables set externally via BLE
 void readBLEVars() {
-  /*if (kPCharacteristic.written()) {
+  if (kPCharacteristic.written()) {
     String temp = kPCharacteristic.value();
     kP = temp.toFloat();
     Serial.print("kP written: ");
@@ -186,7 +185,7 @@ void readBLEVars() {
     kPExp = temp.toFloat();
     Serial.print("kPExp written: ");
     Serial.println(kPExp);
-  }*/
+  }
   
 
   if (kICharacteristic.written()) {

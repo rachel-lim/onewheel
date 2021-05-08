@@ -5,33 +5,32 @@
 
 double boardAngle = 0;
 double targetBoardAngle = 0;
-//double angleError = 0;
-//double time = micros();
-//double deltaTime = 0;
-//double prevTime = 0;
-//double errorAccumulated = 0;
-//double previousError = 0;
-//double deltaError = 0;
+double maxMotorDutyCycle = 0.8;
+
+int assumedFrequency = 210 / 1000; // Hz / (milliseconds per second)
+
+double integral = 0;
+double previousError = 0;
+
 volatile double kP = 3.25; // old default was 2.0
 volatile double kPExp = 1.6;
 bool useExponentialKp = true;
 bool useDynamicBalance = false;
 double kBalance = 1.6;
 volatile double kI = 0.0012;
-volatile double kIExp = 2.1;
+double delta = 0;
+volatile double kIExp = 1.5;
 bool useExponentialKi = true;
-//double iMax = 0;
+double iMax = maxMotorDutyCycle;
 volatile double kD = 0;
-double currentSpeed = 0;
-//double throttlePedal = 0.0;
-//double overallGain = 0;
-//double motorOutput = 0;
-double maxMotorDutyCycle = 0.8;
-//double calcedMotorOutput = 0;
+long currentTime = 0;
+long previousTime = 0;
+long timeScalingFactor = 0;
+//double currentSpeed = 0;
 double allowableChangePerCycle = 0.01; // duty cycle
 //bool useRateChangeLimit = false;
 
-double prevMotorSpeed = 0;
+//double prevMotorSpeed = 0;
 int boardStartRidingAngle = 10;
 
 // motor parameters
@@ -156,7 +155,7 @@ void loop() {
 long startTime = 0;
 long endTime = 0;
 int timingCycleCounter = 0;
-int TIMED_CYCLES = 100;
+int TIMED_CYCLES = 1000;
 long avgTime = 0;
 long totalTime = 0;
 float frequency = 0; // Hz
@@ -190,6 +189,8 @@ void doWaitForRider() {
   readBLEVars();
   publishRegularBLE();
 
+  integral = 0;
+  previousError = 0;
 
 
   // monitor FSRs
@@ -202,22 +203,20 @@ void doWaitForRider() {
   }
 
   //setMotorDutyCycle(0.0);
-  currentSpeed = 0;
-
+  
   hasStartedRiding = false;
-  prevMotorSpeed = 0;
 }
 
 
-int missingFootMaxTime = 500;
+int missingFootMaxTime = 500; // milliseconds
 bool wasMissingFeetLastCycle = false;
 long timeFeetLost = millis();
 
-int tippedMaxTime = 500;
+int tippedMaxTime = 500; // milliseconds
 bool wasTippedLastCycle = false;;
 long timeTipped = millis();
 
-int rolledMaxTime = 500;
+int rolledMaxTime = 500; // milliseconds
 bool wasRolledLastCycle = false;
 long timeRolled = millis();
 
@@ -289,32 +288,38 @@ void doRiding() {
 
 
   double motorSpeed = 0;
-
-  /*if(!useExponentialKp) {
-    motorSpeed = kP * scaleClipped(getBoardPitch(), -30, 30, -1.0, 1.0);
-  } else {
-    motorSpeed = pow(abs(getBoardPitch()),kPExp) * 2 / 60 * sign(getBoardPitch());
+  currentTime = millis();
+  timeScalingFactor = (currentTime - previousTime) * assumedFrequency;
+  previousTime = currentTime;
+  
+  // proportional term
+  double proportional = pow(abs(getBoardPitch()),kPExp) * 0.033333 * sign(getBoardPitch()); //: 2 / 60 = 0.033333
+  if(kPExp == 0) {
+    proportional = 0;
   }
 
+  // integral term
+  delta = pow(abs(getBoardPitch()), kIExp) * 0.0001 * sign(getBoardPitch());
+  integral += constrain(delta, -allowableChangePerCycle, allowableChangePerCycle);
+  integral = constrain(integral, -iMax, iMax);
   
+  // derivative term
+  double derivative = (getBoardPitch() - previousError)*kD;
+  previousError = getBoardPitch();
 
-  motorSpeed = motorSpeed + (prevMotorSpeed - motorSpeed)*kD; */
-
-
-  float delta = getBoardPitch() * kI;
-  delta = constrain(delta, -allowableChangePerCycle, allowableChangePerCycle);
+  // PID!!!
+  motorSpeed = proportional + integral + derivative;
   
-  motorSpeed = currentSpeed + delta;
 
   motorSpeed = constrain(motorSpeed, -maxMotorDutyCycle, maxMotorDutyCycle);
 
-  currentSpeed = motorSpeed;
+  //currentSpeed = motorSpeed;
   
   //if(useDynamicBalance) {
   //  targetAngle = abs(pow(motorSpeed-1, 1/kBalance) * -sign(getBoardPitch()));
   //}
   
-  prevMotorSpeed = motorSpeed;
+  //prevMotorSpeed = motorSpeed;
   setMotorDutyCycle(motorSpeed);
   //LOG_PORT.print(", angle: ");
   //LOG_PORT.print(getBoardPitch());
